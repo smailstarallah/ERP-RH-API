@@ -1,5 +1,6 @@
 package ma.digitalia.gestionutilisateur.services;
 
+import ma.digitalia.gestionutilisateur.dto.DepartmentEmployeesDTO;
 import ma.digitalia.gestionutilisateur.entities.Employe;
 
 import java.util.List;
@@ -38,7 +39,28 @@ public interface EmployeService {
     /**
      * existsById
      * @param id
-     * @return
+     * @return true if an employee with the given ID exists, false otherwise
      */
     boolean existsById(Long id);
+
+    /**
+     * Find all employees in the department.
+     * @return a list of employees in the department
+     */
+    List<Employe> findByDepartement(String departement);
+
+    /**
+     * Get all employees ordered by department.
+     * @return a list of employees ordered by department
+     */
+    List<DepartmentEmployeesDTO> getEmployesByDepartmentDTO();
+
+    /**
+     * Update an employee.
+     * This method updates the employee's information in the database.
+     * @param employe the employee to update
+     */
+    void updateEmploye(Employe employe);
+
+    void activateEmploye(Long id);
 }

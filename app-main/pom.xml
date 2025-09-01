@@ -51,6 +51,11 @@
             <artifactId>suivi-du-temps</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>ma.digitalia</groupId>
+            <artifactId>generation-fiche-paie</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

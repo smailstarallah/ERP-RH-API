@@ -1,7 +1,10 @@
 package ma.digitalia.suividutemps.services;
 
+import ma.digitalia.suividutemps.entities.PlanningTravail;
 import ma.digitalia.suividutemps.repositories.PlanningTravailRepository;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class PlanningTravailServiceImpl implements PlanningTravailService {
@@ -12,24 +15,9 @@ public class PlanningTravailServiceImpl implements PlanningTravailService {
         this.planningTravailRepository = planningTravailRepository;
     }
 
-
     @Override
-    public void startTimeTracking(Long empId) {
-
-    }
-
-    @Override
-    public void stopTimeTracking(Long empId) {
-
-    }
-
-    @Override
-    public void startPauseTime(Long empId) {
-
-    }
-
-    @Override
-    public void stopPauseTime(Long empId) {
-
+    public void createPlanning(List<PlanningTravail> planningTravail) {
+        planningTravail.forEach(PlanningTravail::calculateHeuresParJour);
+        planningTravailRepository.saveAll(planningTravail);
     }
 }

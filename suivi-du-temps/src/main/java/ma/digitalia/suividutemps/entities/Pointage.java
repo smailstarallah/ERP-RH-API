@@ -1,23 +1,26 @@
 package ma.digitalia.suividutemps.entities;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ma.digitalia.gestionutilisateur.entities.Employe;
 import ma.digitalia.suividutemps.Enum.StatutPointage;
 
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 @Entity
-@Table(name = "demande_conge")
+@Table(name = "pointage")
 public class Pointage {
 
     /**
@@ -41,28 +44,14 @@ public class Pointage {
      */
     @JsonFormat(pattern = "HH:mm:ss")
     @Column(name = "heure_entree")
-    private LocalTime heureEntree;
+    private LocalDateTime heureEntree;
 
     /**
      * Heure de sortie du travail
      */
     @JsonFormat(pattern = "HH:mm:ss")
     @Column(name = "heure_sortie")
-    private LocalTime heureSortie;
-
-    /**
-     * Heure de début de pause
-     */
-    @JsonFormat(pattern = "HH:mm:ss")
-    @Column(name = "pause_debutee")
-    private LocalTime pauseDebutee;
-
-    /**
-     * Heure de fin de pause
-     */
-    @JsonFormat(pattern = "HH:mm:ss")
-    @Column(name = "pause_terminee")
-    private LocalTime pauseTerminee;
+    private LocalDateTime heureSortie;
 
     /**
      * Durée totale des heures travaillées
@@ -78,10 +67,42 @@ public class Pointage {
     @Column(name = "statut", length = 20)
     private StatutPointage statut;
 
-    /**
-     * Commentaire ou remarque sur le pointage
-     */
-    @Size(max = 500, message = "Le commentaire ne peut pas dépasser 500 caractères")
-    @Column(name = "commentaire", length = 500)
-    private String commentaire;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "employe_id")
+    @JsonIgnore
+    private Employe employe;
+
+    @OneToMany(mappedBy = "pointage", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("debut ASC")
+    private List<Activite> activites = new ArrayList<>();
+
+    public Pointage(Employe employe) {
+        this.date = LocalDate.now();
+        this.heureEntree = LocalDateTime.now();
+        this.employe = employe;
+    }
+
+
+    public Duration calculerHeuresTravaillees() {
+        if (heureEntree != null && heureSortie != null) {
+            heuresTravaillees = Duration.between(heureEntree, heureSortie);
+            Duration tempsPause = activites.stream()
+                    .filter(activite -> activite.getType() == ma.digitalia.suividutemps.Enum.TypeActivite.PAUSE)
+                    .filter(activite -> activite.getDebut() != null && activite.getFin() != null)
+                    .map(activite -> Duration.between(activite.getDebut(), activite.getFin()))
+                    .reduce(Duration.ZERO, Duration::plus);
+            heuresTravaillees = heuresTravaillees.minus(tempsPause);
+        }
+        if(heureEntree != null && heureSortie == null){
+            heuresTravaillees = Duration.between(heureEntree, LocalDateTime.now());
+            Duration tempsPause = activites.stream()
+                    .filter(activite -> activite.getType() == ma.digitalia.suividutemps.Enum.TypeActivite.PAUSE)
+                    .filter(activite -> activite.getDebut() != null && activite.getFin() != null)
+                    .map(activite -> Duration.between(activite.getDebut(), activite.getFin()))
+                    .reduce(Duration.ZERO, Duration::plus);
+            heuresTravaillees = heuresTravaillees.minus(tempsPause);
+        }
+
+        return heuresTravaillees;
+    }
 }

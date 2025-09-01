@@ -18,8 +18,8 @@ public interface DemandeCongeRepository extends JpaRepository<DemandeConge, Long
 
     /**
      * Update the status of a leave request.
-     * @param id
-     * @param statut
+     * @param id the ID of the leave request to update
+     * @param statut the new status to set
      */
     @Modifying
     @Query("UPDATE DemandeConge d SET d.statut = :statut WHERE d.id = :id")
@@ -41,4 +41,6 @@ public interface DemandeCongeRepository extends JpaRepository<DemandeConge, Long
 
     @Query("SELECT d FROM DemandeConge d WHERE d.validateur = :validateur AND d.statut <> :statut")
     List<DemandeConge> findDemandeCongeByValidateurAndStatut(Manager validateur, StatutDemande statut);
+
+    List<DemandeConge> findByStatut(StatutDemande statut);
 }

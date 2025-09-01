@@ -56,4 +56,13 @@ public class TypeCongeServiceImpl implements TypeCongeService {
         typeCongeRpository.save(typeConge);
     }
 
+    @Override
+    public void deleteById(Long id) {
+        if(typeCongeRpository.existsById(id)) {
+            typeCongeRpository.deleteById(id);
+        } else {
+            throw new EntityNotFoundException("Type de congés not found with id: " + id);
+        }
+    }
+
 }

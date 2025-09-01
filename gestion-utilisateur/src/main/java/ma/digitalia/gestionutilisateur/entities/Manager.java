@@ -1,5 +1,6 @@
 package ma.digitalia.gestionutilisateur.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.Data;
@@ -13,12 +14,13 @@ import java.util.List;
 @NoArgsConstructor
 @Entity
 @DiscriminatorValue("MANAGER")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Manager extends Users {
 
     @Column(nullable = false)
     private String department;
 
-    @JsonIgnoreProperties
+    @JsonIgnore
     @Column(nullable = false)
     @OneToMany(mappedBy = "manager", fetch = FetchType.LAZY)
     private List<Employe> employes;

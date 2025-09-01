@@ -14,6 +14,8 @@ import lombok.AllArgsConstructor;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
@@ -77,6 +79,15 @@ public class PlanningTravail {
     /**
      * Nombre total d'heures de travail par jour
      */
+    @JdbcTypeCode(SqlTypes.INTERVAL_SECOND)
     @Column(name = "heures_par_jour")
     private Duration heuresParJour;
+
+    public void calculateHeuresParJour() {
+        Duration matin = (heureDebutMatin != null && heureFinMatin != null) ?
+                Duration.between(heureDebutMatin, heureFinMatin) : Duration.ZERO;
+        Duration apresMidi = (heureDebutApresMidi != null && heureFinApresMidi != null) ?
+                Duration.between(heureDebutApresMidi, heureFinApresMidi) : Duration.ZERO;
+        this.heuresParJour = matin.plus(apresMidi);
+    }
 }

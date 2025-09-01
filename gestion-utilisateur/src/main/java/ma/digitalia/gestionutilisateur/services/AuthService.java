@@ -132,6 +132,15 @@ public class AuthService {
                 setCommonFields(employe, request);
                 employe.setNumeroEmploye(request.getNumeroEmploye());
                 employe.setPoste(request.getPoste());
+                employe.setCin(request.getCin());
+                employe.setDateEmbauche(request.getDateEmbauche());
+                employe.setSalairBase(request.getSalairBase());
+                employe.setTauxHoraire(request.getTauxHoraire());
+                employe.setAdresse(request.getAdresse());
+                if (request.getManager() != null) {
+                    employe.setManager((Manager) usersRepository.findById(request.getManager())
+                            .orElseThrow(() -> new RuntimeException("Manager non trouvé")));
+                }
                 yield employe;
             }
             case MANAGER -> {

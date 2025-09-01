@@ -20,4 +20,13 @@ public interface EmployeRepository extends JpaRepository<Users, Long> {
 
     @Query("SELECT e FROM Employe e WHERE e.manager.Id = ?1 AND e.active = true")
     List<Employe> findActiveEmployesByManager(Long managerId);
+
+    @Query("SELECT e FROM Employe e WHERE e.manager.department = ?1")
+    List<Employe> findByDepartement(String departement);
+
+    @Query("SELECT e FROM Employe e ORDER BY e.manager.department")
+    List<Employe> findAllEmployesOrderByDepartment();
+
+    @Query("SELECT DISTINCT e.manager.department FROM Employe e WHERE e.manager.department IS NOT NULL")
+    List<String> findAllDepartments();
 }

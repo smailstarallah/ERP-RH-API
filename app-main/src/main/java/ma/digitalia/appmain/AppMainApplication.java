@@ -9,11 +9,11 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         "ma.digitalia.gestionutilisateur",
         "ma.digitalia.gestionconges",
         "ma.digitalia.suividutemps",
+        "ma.digitalia.generationfichepaie",
 })
 public class AppMainApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(AppMainApplication.class, args);
     }
-
 }

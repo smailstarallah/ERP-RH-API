@@ -160,4 +160,20 @@ public class DemandeCongeControllers {
             return  ResponseEntity.internalServerError().body("Erreur interne du serveur");
         }
     }
+
+    @DeleteMapping("/delete-type-conge/{id}")
+    public ResponseEntity<?> deleteTypeConge(@PathVariable Long id) {
+        try {
+            log.info("Suppression du type de congé avec l'ID: {}", id);
+            typeCongeService.deleteById(id);
+            log.info("Type de congé supprimé avec succès");
+            return ResponseEntity.ok("Type de congé supprimé avec succès");
+        } catch (EntityNotFoundException e) {
+            log.error("Type de congé non trouvé: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Erreur interne du serveur: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body("Erreur interne du serveur");
+        }
+    }
 }

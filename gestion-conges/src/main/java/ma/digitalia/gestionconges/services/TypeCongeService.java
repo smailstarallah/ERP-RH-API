@@ -22,4 +22,10 @@ public interface TypeCongeService {
     List<TypeConge> getAllTypeConges();
 
     void save(TypeConge typeConge);
+
+    /**
+     * Deletes a TypeConge by its ID.
+     * @param id the ID of the TypeConge to delete
+     */
+    void deleteById(Long id);
 }

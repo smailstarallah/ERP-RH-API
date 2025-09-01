@@ -4,6 +4,9 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 import ma.digitalia.gestionutilisateur.Enum.UserType;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
 @Data
 public class RegisterRequest {
     @NotBlank(message = "Le nom est obligatoire")
@@ -34,8 +37,15 @@ public class RegisterRequest {
 
     // Champs spécifiques selon le type
     private String numeroEmploye; // Pour EMPLOYE
-    private String cin;
     private String poste;
+
+    private String cin;
+    private LocalDate dateEmbauche;
+    private BigDecimal salairBase;
+    private BigDecimal tauxHoraire;
+    private String adresse;
+
+    private Long manager;
 
     private String departement; // Pour MANAGER
     private String niveau; // Pour RH
