@@ -70,6 +70,9 @@ public class RapportTemps {
     @Column(name = "nombre_jours_absence", precision = 5, scale = 2)
     private Integer nombreJoursAbsence;
 
+    @Column(name = "nombre_jours_travail")
+    private Integer nombreJoursTravail;
+
     /**
      * Identifiant de l'employé concerné par ce rapport
      * Utilisé pour les relations avec l'entité Employe

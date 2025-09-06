@@ -5,6 +5,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import ma.digitalia.generationfichepaie.Enum.ModeCalcul;
 import ma.digitalia.generationfichepaie.Enum.TypeElement;
+import ma.digitalia.generationfichepaie.dto.AjoutElementPaieDTO;
 import ma.digitalia.generationfichepaie.entities.ElementPaie;
 import ma.digitalia.generationfichepaie.entities.FichePaie;
 import ma.digitalia.generationfichepaie.helpers.FichePaiePdfGenerateur;
@@ -25,8 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import static ma.digitalia.generationfichepaie.Enum.TypeElement.DEDUCTION_ABSENCE;
-import static ma.digitalia.generationfichepaie.Enum.TypeElement.DEDUCTION_AUTRE;
+import static ma.digitalia.generationfichepaie.Enum.TypeElement.*;
 
 @Slf4j
 @Service
@@ -45,14 +45,14 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         this.fichePaieRepository = fichePaieRepository;
     }
 
-    @PostConstruct
-    public void init() {
-        try {
-            genererFichePaie(2L);
-        } catch (Exception e) {
-            log.error("Erreur lors de la génération de la fiche de paie : {}", e.getMessage());
-        }
-    }
+//    @PostConstruct
+//    public void init() {
+//        try {
+//            genererFichePaie(2L);
+//        } catch (Exception e) {
+//            log.error("Erreur lors de la génération de la fiche de paie : {}", e.getMessage());
+//        }
+//    }
 
     @Override
     public void ajouterElementPaie(Long employeId, ElementPaie elementPaie) {
@@ -61,16 +61,45 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         Employe employe = (Employe) employeRepository.findById(employeId)
                 .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé avec l'ID : " + employeId));
         if (elementPaieRepository.existsByEmployeAndTypeAndSousType(employe, elementPaie.getType(), elementPaie.getSousType())) {
-            throw new IllegalArgumentException("L'élément de paie existe déjà pour cet employé.");
+            List<ElementPaie> elements = elementPaieRepository.findByEmployeAndTypeAndSousType(employe, elementPaie.getType(), elementPaie.getSousType());
+            for (ElementPaie e : elements) {
+                if (e.getSousType() != null && e.getSousType().equals(elementPaie.getSousType())) {
+                    throw new IllegalArgumentException("L'élément de paie existe déjà pour cet employé.");
+                }
+            }
         }
 
         if (elementPaie.getEmploye() == null) {
             elementPaie.setEmploye(employe);
         }
         if (elementPaie.getMontant() == null) {
-            elementPaie.setMontant(calculerMontant(elementPaie));
+            elementPaie.setMontant(calculerMontant(elementPaie, YearMonth.now()));
         }
         elementPaieRepository.save(elementPaie);
+        log.info("Élément de paie ajouté pour l'employé avec l'ID : {}", employeId);
+    }
+
+    @Override
+    public void ajouterElementPaie(Long employeId, AjoutElementPaieDTO elementPaie) {
+        log.info("Ajout d'un elementPaie {} pour l'employé avec l'ID : {}", elementPaie.getType() , employeId);
+
+        Employe employe = (Employe) employeRepository.findById(employeId)
+                .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé avec l'ID : " + employeId));
+
+        if (elementPaieRepository.existsByEmployeAndTypeAndSousType(employe, elementPaie.getType(), elementPaie.getSousType())) {
+
+            List<ElementPaie> elements = elementPaieRepository.findByEmployeAndTypeAndSousType(employe, elementPaie.getType(), elementPaie.getSousType());
+
+            for (ElementPaie e : elements) {
+                if (e.getSousType() != null && e.getSousType().equals(elementPaie.getSousType())) {
+                    throw new IllegalArgumentException("L'élément de paie existe déjà pour cet employé.");
+                }
+            }
+        }
+
+        ElementPaie newElementPaie = new ElementPaie(elementPaie, employe);
+        newElementPaie.setMontant(calculerMontant(newElementPaie, YearMonth.now()));
+        elementPaieRepository.save(newElementPaie);
         log.info("Élément de paie ajouté pour l'employé avec l'ID : {}", employeId);
     }
 
@@ -88,29 +117,44 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         return elements;
     }
 
-    public BigDecimal calculerMontant(ElementPaie elementPaie) {
+    public BigDecimal calculerMontant(ElementPaie elementPaie, YearMonth periode) {
         if (elementPaie.getModeCalcul() == null) return BigDecimal.ZERO;
-        if (elementPaie.getMontant() != null) return elementPaie.getMontant();
         switch (elementPaie.getModeCalcul()) {
             case MONTANT:
                 return elementPaie.getMontant() != null ? elementPaie.getMontant() : BigDecimal.ZERO;
-
             case TAUX:
                 if (elementPaie.getTaux() != null && elementPaie.getBase() != null) {
                     return elementPaie.getBase().multiply(elementPaie.getTaux()).divide(BigDecimal.valueOf(100));
                 }
                 return BigDecimal.ZERO;
             case PAR_HEURE:
-                // SI DE RETARD RECUPERER DEPUIS TIME TRACKING
+
+                if(elementPaie.getType() == HEURES_SUPPLEMENTAIRES){
+                    RapportTemps rapportTemps = rapportTempsService.getMonthlyReport(elementPaie.getEmploye(), YearMonth.now());
+                    BigDecimal nombreHeuresSupplementaires = new BigDecimal(String.valueOf(rapportTemps.getTotalHeuresSupplementaires().toHours()));
+                    System.out.println("éééééééééééééééééé");
+                    System.out.println(rapportTemps.getTotalHeuresSupplementaires().toHours() + " heures" + elementPaie.getTaux());
+                    return nombreHeuresSupplementaires.multiply(elementPaie.getTaux());
+                }
+
+                if(elementPaie.getType() == DEDUCTION_RETARD){
+                    RapportTemps rapportTemps = rapportTempsService.getMonthlyReport(elementPaie.getEmploye(), YearMonth.now());
+                    BigDecimal nombreJoursAbsence = new BigDecimal(rapportTemps.getNombreRetards());
+                    System.out.println("éééééééééééééééééé");
+                    System.out.println(rapportTemps.getNombreRetards());
+                    return nombreJoursAbsence.multiply(elementPaie.getTaux());
+                }
+
                 if (elementPaie.getTaux() != null && elementPaie.getBase() != null) {
                     return elementPaie.getBase().multiply(elementPaie.getTaux()).divide(BigDecimal.valueOf(100));
                 }
                 return BigDecimal.ZERO;
             case PAR_JOUR:
                 if (elementPaie.getType() == DEDUCTION_ABSENCE ){
-                    RapportTemps rapportTemps = rapportTempsService.getMonthlyReport(elementPaie.getEmploye(), YearMonth.now());
-                    BigDecimal nombreJoursAbsence = new BigDecimal(rapportTemps.getNombreJoursAbsence());
-                    return nombreJoursAbsence.multiply(elementPaie.getTaux()).divide(BigDecimal.valueOf(100));
+                    BigDecimal nombreAbs = rapportTempsService.getNombreAbsences(elementPaie.getEmploye(), periode);
+                    System.out.println("éééééééééééééééééé");
+                    System.out.println(rapportTempsService.getNombreAbsences(elementPaie.getEmploye(), periode));
+                    return nombreAbs.multiply(elementPaie.getTaux());
                 }
                 if (elementPaie.getTaux() != null && elementPaie.getBase() != null) {
                     return elementPaie.getBase().multiply(elementPaie.getTaux()).divide(BigDecimal.valueOf(100));
@@ -151,38 +195,50 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
     }
 
     @Override
-    public byte[] recupererFichePaiePdf(Long employeId) {
+    public byte[] recupererFichePaiePdf(Long employeId, YearMonth periode) {
         Employe employe = (Employe) employeRepository.findById(employeId)
                 .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé avec l'ID : " + employeId));
-        FichePaie fichePaie = fichePaieRepository.findByEmploye(employe);
+        FichePaie fichePaie = fichePaieRepository.findByEmployeAndPeriode(employe, periode);
         if (fichePaie != null && fichePaie.getPdfFile() != null) {
             return fichePaie.getPdfFile();
         }
-        System.out.println("##############################");
-        System.out.println("##############################");
-        System.out.println("##############################");
-        System.out.println("##############################");
-        System.out.println("##############################");
-        return new byte[0];
+        genererFichePaie(employeId, periode);
+        fichePaie = fichePaieRepository.findByEmployeAndPeriode(employe, periode);
+        return fichePaie.getPdfFile();
     }
 
     @Override
-    @Transactional
-    public void genererFichePaie(Long employeId) {
-        YearMonth yearMonth = YearMonth.now();
+//    @Transactional
+    public void genererFichePaie(Long employeId, YearMonth yearMonth) {
 
-        FichePaie fichePaie = fichePaieRepository.findById(14L)
-                .orElse(new FichePaie());
+        FichePaie fichePaie = new FichePaie();
+
         Employe employe = (Employe) employeRepository.findById(employeId)
                 .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé avec l'ID : " + employeId));
+
         fichePaie.setEmploye(employe);
         fichePaie.setStatut(StatutPaie.BROUILLON);
 
+        RapportTemps rapportTemps = rapportTempsService.getMonthlyReport(employe, yearMonth);
+
+        if (rapportTemps == null) {
+            log.warn("Aucun rapport de temps trouvé pour l'employé {} et la période {}", employe.getId(), yearMonth);
+            rapportTempsService.generateMonthlyReport(employeId, yearMonth.getMonth());
+            rapportTemps = rapportTempsService.getMonthlyReport(employe, yearMonth);
+
+        }
+
+        fichePaie.setJoursTravailles(rapportTemps.getNombreJoursTravail());
+        fichePaie.setHeuresSupplementaires((int) rapportTemps.getTotalHeuresSupplementaires().toHours());
+
+
         List<ElementPaie> elements = elementPaieRepository.findByEmploye(employe);
+
         List<ElementPaie> attachedElements = new ArrayList<>();
         for (ElementPaie element : elements) {
             attachedElements.add(elementPaieRepository.findById(element.getId()).orElseThrow());
         }
+
         fichePaie.setElements(attachedElements);
 
         Set<String> tests = new java.util.HashSet<>();
@@ -193,6 +249,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         fichePaie.setSalaireBrut(calculerSalaireBrut(fichePaie));
         fichePaie.setSalaireBrutImposable(calculerSalaireBrutImposable(fichePaie));
         fichePaie.setCotisationsSalariales(calculerCotisationSalariale(fichePaie));
+        fichePaie.setCotisationsPatronales(calculerCotisationPatronale(fichePaie));
         fichePaie.setSalaireNetImposable(fichePaie.getSalaireBrutImposable().subtract(fichePaie.getCotisationsSalariales()));
         //                                                          --> nombre de personne à charge
         fichePaie.setImpotSurLeRevenu(calculerImpotSurLeRevenu(fichePaie, 2));
@@ -200,6 +257,16 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
 
         tests.forEach(log::info);
         System.out.println(fichePaie);
+
+        List<ElementPaie> newElements = elementPaieRepository.findByEmploye(employe);
+
+        List<ElementPaie> newAttachedElements = new ArrayList<>();
+        for (ElementPaie element : newElements) {
+            newAttachedElements.add(elementPaieRepository.findById(element.getId()).orElseThrow());
+        }
+
+        fichePaie.setElements(newAttachedElements);
+
         fichePaie.setPdfFile(FichePaiePdfGenerateur.genererPdf(fichePaie));
 
         fichePaieRepository.save(fichePaie);
@@ -244,15 +311,15 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
                 .map(ElementPaie::getMontant)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal retenue = fichePaie.getElements().stream()
-                .filter(elementPaie -> elementPaie.getType() == DEDUCTION_ABSENCE || elementPaie.getType() == DEDUCTION_AUTRE)
+                .filter(elementPaie -> elementPaie.getType() == DEDUCTION_ABSENCE || elementPaie.getType() == DEDUCTION_AUTRE || elementPaie.getType() == DEDUCTION_RETARD)
                 .map(ElementPaie::getMontant)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         baseCNSS = soumisCNSS.subtract(retenue);
 
         BigDecimal plafond = new BigDecimal("6000");
-        BigDecimal tauxCNSS = new BigDecimal("0.0448"); // 4.48%
-        BigDecimal tauxAMO = new BigDecimal("0.0226"); // 2.26%
+        BigDecimal tauxCNSS = new BigDecimal("0.0448");
+        BigDecimal tauxAMO = new BigDecimal("0.0226");
 
         BigDecimal cotisationCNSS;
         BigDecimal cotisationAMO;
@@ -264,7 +331,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
             cotisationCNSS = baseCNSS.multiply(tauxCNSS);
             cotisationAMO = baseCNSS.multiply(tauxAMO);
         }
-        if(!elementPaieRepository.existsByLibelleContaining("CNSS") ) {
+        if(!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Cotisation CNSS") ) {
             log.info("Ajout des cotisations CNSS à la fiche de paie.");
             ElementPaie cnssElement = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,"Cotisation CNSS", "Cotisation CNSS", ModeCalcul.TAUX, cotisationCNSS
                     , tauxCNSS.multiply(BigDecimal.valueOf(100)), baseCNSS, "Cotisation CNSS calculée automatiquement", false, false, null, null);
@@ -272,23 +339,114 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
             ajouterElementPaie(fichePaie.getEmploye().getId() ,cnssElement);
         }
 
-        if(!elementPaieRepository.existsByLibelleContaining("AMO") ) {
+        if(!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Cotisation AMO") ) {
             log.info("Ajout des cotisations AMO à la fiche de paie.");
             ElementPaie amoElement = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,"cotisation AMO", "Cotisation AMO", ModeCalcul.TAUX, cotisationAMO
                     , tauxAMO.multiply(BigDecimal.valueOf(100)), baseCNSS, "Cotisation AMO calculée automatiquement", false, false, null, null);
 
             ajouterElementPaie(fichePaie.getEmploye().getId() ,amoElement);
         }
-        System.out.println("_____________________________________________________________________");
-        System.out.println("_____________________________________________________________________");
-        System.out.println("_____________________________________________________________________");
-        System.out.println(baseCNSS);
-        System.out.println(cotisationCNSS);
-        System.out.println(cotisationAMO);
         cotisationsSalariales = cotisationsSalariales.add(cotisationCNSS).add(cotisationAMO);
-        System.out.println(cotisationsSalariales);
         return cotisationsSalariales;
     }
+
+    BigDecimal calculerCotisationPatronale(FichePaie fichePaie) {
+        BigDecimal cotisationsPatronales = BigDecimal.ZERO;
+
+        // Base brute soumise CNSS
+        BigDecimal soumisCNSS = fichePaie.getElements().stream()
+                .filter(ElementPaie::isSoumisCNSS)
+                .map(ElementPaie::getMontant)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal retenue = fichePaie.getElements().stream()
+                .filter(elementPaie -> elementPaie.getType() == DEDUCTION_ABSENCE || elementPaie.getType() == DEDUCTION_AUTRE)
+                .map(ElementPaie::getMontant)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal baseCNSS = soumisCNSS.subtract(retenue);
+
+        BigDecimal plafond = new BigDecimal("6000");
+
+        // Taux patronaux
+        BigDecimal tauxCNSSPatronale = new BigDecimal("0.0898"); // 8,98%
+        BigDecimal tauxAMOPatronale = new BigDecimal("0.0411");  // 4,11%
+        BigDecimal tauxFormationPro = new BigDecimal("0.016");   // 1,6%
+        BigDecimal tauxAllocationsFamiliales = new BigDecimal("0.064"); // 6,4%
+
+        // Cotisations
+        BigDecimal cotisationCNSSPatronale;
+        BigDecimal cotisationAMOPatronale;
+        BigDecimal cotisationFormationPro;
+        BigDecimal cotisationAllocationsFamiliales;
+
+        if (baseCNSS.compareTo(plafond) > 0) {
+            cotisationCNSSPatronale = plafond.multiply(tauxCNSSPatronale);
+            cotisationAllocationsFamiliales = plafond.multiply(tauxAllocationsFamiliales);
+        } else {
+            cotisationCNSSPatronale = baseCNSS.multiply(tauxCNSSPatronale);
+            cotisationAllocationsFamiliales = baseCNSS.multiply(tauxAllocationsFamiliales);
+        }
+
+        // AMO & Formation Pro n’ont généralement pas de plafond
+        cotisationAMOPatronale = baseCNSS.multiply(tauxAMOPatronale);
+        cotisationFormationPro = baseCNSS.multiply(tauxFormationPro);
+
+        log.info("Base CNSS pour les cotisations patronales : {}", baseCNSS);
+        log.info("Cotisation CNSS Patronale : {}", cotisationCNSSPatronale);
+        log.info("Cotisation AMO Patronale : {}", cotisationAMOPatronale);
+        log.info("Cotisation Formation Professionnelle : {}", cotisationFormationPro);
+        log.info("Cotisation Allocations Familiales : {}", cotisationAllocationsFamiliales);
+
+        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"CNSS Patronale")) {
+            log.info("Ajout des cotisations CNSS Patronale à la fiche de paie.");
+            ElementPaie cnssPat = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
+                    "Cotisation CNSS Patronale", "CNSS Patronale", ModeCalcul.TAUX, cotisationCNSSPatronale,
+                    tauxCNSSPatronale.multiply(BigDecimal.valueOf(100)), baseCNSS,
+                    "Cotisation CNSS part employeur", false, false, null, null);
+
+            ajouterElementPaie(fichePaie.getEmploye().getId(), cnssPat);
+        }
+
+        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"AMO Patronale")) {
+            log.info("Ajout des cotisations AMO Patronale à la fiche de paie.");
+            ElementPaie amoPat = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
+                    "Cotisation AMO Patronale", "AMO Patronale", ModeCalcul.TAUX, cotisationAMOPatronale,
+                    tauxAMOPatronale.multiply(BigDecimal.valueOf(100)), baseCNSS,
+                    "Cotisation AMO part employeur", false, false, null, null);
+
+            ajouterElementPaie(fichePaie.getEmploye().getId(), amoPat);
+        }
+
+        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Formation Pro")) {
+            log.info("Ajout des cotisations Formation Professionnelle à la fiche de paie.");
+            ElementPaie formPro = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
+                    "Cotisation Formation Professionnelle", "Formation Pro", ModeCalcul.TAUX, cotisationFormationPro,
+                    tauxFormationPro.multiply(BigDecimal.valueOf(100)), baseCNSS,
+                    "Cotisation Formation Pro part employeur", false, false, null, null);
+
+            ajouterElementPaie(fichePaie.getEmploye().getId(), formPro);
+        }
+
+        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Allocations Familiales")) {
+            log.info("Ajout des cotisations Allocations Familiales à la fiche de paie.");
+            ElementPaie alloc = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
+                    "Cotisation Allocations Familiales", "Allocations Familiales", ModeCalcul.TAUX, cotisationAllocationsFamiliales,
+                    tauxAllocationsFamiliales.multiply(BigDecimal.valueOf(100)), baseCNSS,
+                    "Cotisation Allocations Familiales part employeur", false, false, null, null);
+
+            ajouterElementPaie(fichePaie.getEmploye().getId(), alloc);
+        }
+
+        cotisationsPatronales = cotisationsPatronales
+                .add(cotisationCNSSPatronale)
+                .add(cotisationAMOPatronale)
+                .add(cotisationFormationPro)
+                .add(cotisationAllocationsFamiliales);
+
+        return cotisationsPatronales;
+    }
+
 
     BigDecimal calculerSalaireNet(FichePaie fichePaie) {
         BigDecimal salaireNet;
@@ -342,7 +500,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         // 5. Impôt mensuel
         BigDecimal impotMensuel = impotAnnuel.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
         //ajouter element paie impot sur le revenu si n'existe pas
-        if(!elementPaieRepository.existsByLibelleContaining("Impôt sur le revenu") ) {
+        if(!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Impôt sur le revenu") ) {
             log.info("Ajout de l'impôt sur le revenu à la fiche de paie.");
             ElementPaie irElement = new ElementPaie(null, TypeElement.IMPOT,"Impôt sur le revenu", "Impôt sur le revenu", ModeCalcul.TAUX, impotMensuel
                     , null, null, "Impôt sur le revenu calculé automatiquement", false, false, null, null);
@@ -351,4 +509,12 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         return impotMensuel;
     }
 
+    @Override
+    @Transactional
+    public void supprimerElementPaie(Long elementPaieId) {
+        ElementPaie element = elementPaieRepository.findById(elementPaieId)
+                .orElseThrow(() -> new EntityNotFoundException("Élément de paie non trouvé avec l'ID: " + elementPaieId));
+        elementPaieRepository.delete(element);
+        log.info("Élément de paie supprimé avec succès, ID: {}", elementPaieId);
+    }
 }

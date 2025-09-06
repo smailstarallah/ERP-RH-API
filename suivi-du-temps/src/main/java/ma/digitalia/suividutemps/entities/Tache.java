@@ -34,4 +34,8 @@ public class Tache {
     @JsonIgnore
     @JoinColumn(name = "projet_id")
     private Projet projet;
+
+    public boolean isTerminee() {
+        return this.statut == TacheStatut.TERMINEE;
+    }
 }

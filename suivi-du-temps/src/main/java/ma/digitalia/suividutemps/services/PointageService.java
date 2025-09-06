@@ -52,9 +52,9 @@ public interface PointageService {
      * Récupère le pointage d'un employé pour une date spécifique.
      * @param employeId
      * @param date
-     * @return Liste de pointages pour la semaine de l'employé à partir de la date spécifiée.
+     * @return WeeklyPointageDto pour la semaine de l'employé à partir de la date spécifiée.
      */
-    List<Pointage> getPointagesSemaineByEmploye (Long employeId, LocalDate date);
+    WeeklyPointageDto getPointagesSemaineByEmploye (Long employeId, LocalDate date);
 
     List<EfficaciteParSemaineDTO> getEfficaciteParSemaine(Long employeId, LocalDate date);
 
@@ -73,4 +73,18 @@ public interface PointageService {
     MonthlyPresenceReportDto getMonthlyPresenceReport(Long employeId, int year, int month);
 
     List<ActivityOfDayDto> getActivitiesOfDay(Long empId);
+
+    /**
+     * Récupère les pointages et la planification pour une semaine donnée.
+     *
+     * @param weekStart La date de début de la semaine
+     * @return PointageResponseDto contenant les activités et la planification de la semaine
+     */
+    PointageResponseDto getPointagesForWeek(LocalDate weekStart, Long employeId);
+
+    /**
+     * Démarre le suivi du temps pour une réunion.
+     * @param pointageRequest L'objet contenant les informations nécessaires pour démarrer la réunion.
+     */
+    void startReunionTime(PointageRequest pointageRequest);
 }

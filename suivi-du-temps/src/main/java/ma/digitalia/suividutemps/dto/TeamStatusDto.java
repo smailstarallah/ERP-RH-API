@@ -39,6 +39,36 @@ public class TeamStatusDto {
     @JsonProperty("avatar")
     private String avatar;
 
+    @JsonProperty("lastActivity")
+    private String lastActivity;
+
+    @JsonProperty("performance")
+    private String performance;
+
+    @JsonProperty("weeklyHours")
+    private Double weeklyHours;
+
+    @JsonProperty("targetHours")
+    private Double targetHours;
+
+    @JsonProperty("lateArrivalCount")
+    private Integer lateArrivalCount;
+
+    @JsonProperty("overTimeHours")
+    private Double overTimeHours;
+
+    @JsonProperty("department")
+    private String department;
+
+    @JsonProperty("manager")
+    private String manager;
+
+    @JsonProperty("urgentTasks")
+    private Integer urgentTasks;
+
+    @JsonProperty("availabilityStatus")
+    private String availabilityStatus;
+
     public String toString() {
         return "TeamStatusDto{" +
                 "employeeId='" + employeeId + '\'' +
@@ -47,6 +77,16 @@ public class TeamStatusDto {
                 ", isConnected=" + isConnected +
                 ", todayHours=" + todayHours +
                 ", avatar='" + avatar + '\'' +
+                ", lastActivity='" + lastActivity + '\'' +
+                ", performance='" + performance + '\'' +
+                ", weeklyHours=" + weeklyHours +
+                ", targetHours=" + targetHours +
+                ", lateArrivalCount=" + lateArrivalCount +
+                ", overTimeHours=" + overTimeHours +
+                ", department='" + department + '\'' +
+                ", manager='" + manager + '\'' +
+                ", urgentTasks=" + urgentTasks +
+                ", availabilityStatus='" + availabilityStatus + '\'' +
                 '}';
     }
 }

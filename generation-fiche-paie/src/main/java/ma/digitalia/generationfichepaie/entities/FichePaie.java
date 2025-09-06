@@ -31,9 +31,13 @@ public class FichePaie {
     private BigDecimal salaireBrut;
     private BigDecimal salaireBrutImposable;
     private BigDecimal cotisationsSalariales;
+    private BigDecimal cotisationsPatronales;
     private BigDecimal salaireNetImposable;
     private BigDecimal salaireNet;
     private BigDecimal impotSurLeRevenu;
+
+    private Integer JoursTravailles;
+    private Integer heuresSupplementaires;
 
     @Timestamp
     private LocalDateTime dateGeneration;

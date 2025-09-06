@@ -7,5 +7,6 @@ public enum ModeCalcul {
     BAREME,           // Selon un barème (ex: IR, CNSS)
     PAR_JOUR,         // Ex: indemnité par jour
     PAR_HEURE,        // Ex: heures supplémentaires
-    FORMULE           // Calcul personnalisé (script ou règle métier)
+    FORMULE,           // Calcul personnalisé (script ou règle métier)
+    AUTOMATIQUE_TIME_TRACKING
 }

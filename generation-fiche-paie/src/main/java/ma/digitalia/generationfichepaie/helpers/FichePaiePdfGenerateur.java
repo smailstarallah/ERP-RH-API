@@ -76,39 +76,62 @@ public class FichePaiePdfGenerateur {
         elementsTries.sort(ELEMENT_COMPARATOR);
 
         boolean aInsereTotauxBruts = false;
-        boolean aInsereTotalCotisations = false; // Flag pour s'assurer qu'on n'insère le total qu'une seule fois
+        boolean aInsereTotalCotisations = false;
 
         for (ElementPaie element : elementsTries) {
+            if (element == null || element.getType() == null || element.getMontant() == null || element.getMontant().compareTo(BigDecimal.ZERO) == 0) {
+                continue;
+            }
 
-            // --- Injecter les totaux bruts ---
             if (!isGainType(element.getType()) && !aInsereTotauxBruts) {
                 ajouterLigneTotale(table, "Total Brut", formatBigDecimal(fiche.getSalaireBrut()), 5);
                 ajouterLigneTotale(table, "Total Brut imposable", formatBigDecimal(fiche.getSalaireBrutImposable()), 5);
-                ajouterLigneSeparation(table);
                 aInsereTotauxBruts = true;
             }
 
-            // --- NOUVELLE LOGIQUE : Injecter le total des cotisations ---
-            // S'exécute quand on rencontre le premier élément qui n'est NI un gain, NI une cotisation.
             if (!isGainType(element.getType()) && !isCotisationType(element.getType()) && !aInsereTotalCotisations) {
                 if (fiche.getCotisationsSalariales() != null && fiche.getCotisationsSalariales().compareTo(BigDecimal.ZERO) != 0) {
-                    BigDecimal totalPatronal = BigDecimal.ZERO; // TODO: Implémenter le calcul des charges patronales
+                    BigDecimal totalPatronal = fiche.getCotisationsPatronales();
                     ajouterLigneTotaleCotisations(table, "Total Cotisations", formatBigDecimal(fiche.getCotisationsSalariales()), formatBigDecimal(totalPatronal));
                 }
-                aInsereTotalCotisations = true; // On marque comme inséré pour ne pas le refaire
+                aInsereTotalCotisations = true;
             }
 
-            // Affiche la ligne en fonction de son type
             switch (element.getType()) {
                 case SALAIRE_BASE:
+                    ajouterLigneGain(table, element.getLibelle(), formatBigDecimal(element.getBase()), fiche.getJoursTravailles().toString(), formatBigDecimal(element.getMontant()), "");
+                    break;
                 case HEURES_SUPPLEMENTAIRES:
-                case PRIME_FIXE:
+                    ajouterLigneGain(table, element.getLibelle(), formatBigDecimal(element.getBase()), fiche.getHeuresSupplementaires().toString(), formatBigDecimal(element.getMontant()), "");
+                    break;
                 case PRIME_VARIABLE:
+                    ajouterLigneGain(table, element.getLibelle(), formatBigDecimal(element.getBase()), "", formatBigDecimal(element.getMontant()), element.getTaux().toString());
+                    break;
+                case PRIME_FIXE:
                 case INDEMNITE:
-                    String nombre = element.getType() == TypeElement.SALAIRE_BASE ? "26" : "";
-                    ajouterLigneGain(table, element.getLibelle(), formatBigDecimal(element.getBase()), nombre, formatBigDecimal(element.getMontant()));
+                    ajouterLigneGain(table, element.getLibelle(), formatBigDecimal(element.getBase()), "", formatBigDecimal(element.getMontant()), "");
                     break;
                 case COTISATION_SOCIALE:
+                    if(element.getLibelle().contains("Patronale")){ break; }
+                    if(element.getLibelle().contains("Cotisation CNSS") || element.getLibelle().contains("Cotisation AMO")) {
+                        String motif = element.getLibelle().contains("CNSS") ? "CNSS" : "AMO";
+                        List<ElementPaie> cotisationsCNSS = fiche.getElements().stream()
+                                .filter(e -> e.getType() == TypeElement.COTISATION_SOCIALE && e.getLibelle().contains(motif)).toList();
+                        ElementPaie cotisationSalariale = cotisationsCNSS.stream()
+                                .filter(e -> e.getLibelle().contains("Cotisation "+motif)).findFirst().orElse(null);
+                        ElementPaie cotisationPatronale = cotisationsCNSS.stream()
+                                .filter(e -> e.getLibelle().contains(motif + " Patronale")).findFirst().orElse(null);
+                        if (cotisationSalariale != null && cotisationPatronale != null) {
+                            ajouterLigneCotisationCNSS(table, cotisationSalariale.getLibelle(), formatBigDecimal(cotisationSalariale.getBase()),
+                                    formatTaux(cotisationSalariale.getTaux()), formatBigDecimal(cotisationSalariale.getMontant()),
+                                    formatTaux(cotisationPatronale.getTaux()), formatBigDecimal(cotisationPatronale.getMontant()));
+                        }
+                        break;
+                    }
+                    if(element.getLibelle().contains("Familiales") || element.getLibelle().contains("Formation")){
+                        ajouterLigneCotisationPatronales(table, element.getLibelle(), formatBigDecimal(element.getBase()), formatTaux(element.getTaux()), formatBigDecimal(element.getMontant()));
+                        break;
+                    }
                     ajouterLigneCotisation(table, element.getLibelle(), formatBigDecimal(element.getBase()), formatTaux(element.getTaux()), formatBigDecimal(element.getMontant()));
                     break;
                 case DEDUCTION_ABSENCE:
@@ -121,19 +144,18 @@ public class FichePaiePdfGenerateur {
             }
         }
 
-        // --- GESTION DES CAS DE FIN DE LISTE ---
-
-        // Cas 1 : Si la fiche ne contient QUE des gains
         if (!aInsereTotauxBruts && !elementsTries.isEmpty()) {
             ajouterLigneTotale(table, "Total Brut", formatBigDecimal(fiche.getSalaireBrut()), 5);
             ajouterLigneTotale(table, "Total Brut imposable", formatBigDecimal(fiche.getSalaireBrutImposable()), 5);
         }
 
-        // Cas 2 : Si la fiche se termine par des cotisations (et donc le total n'a pas encore été inséré)
         if (!aInsereTotalCotisations && fiche.getCotisationsSalariales() != null && fiche.getCotisationsSalariales().compareTo(BigDecimal.ZERO) != 0) {
-            BigDecimal totalPatronal = BigDecimal.ZERO; // TODO: Implémenter le calcul
+            BigDecimal totalPatronal = fiche.getCotisationsPatronales();
             ajouterLigneTotaleCotisations(table, "Total Cotisations", formatBigDecimal(fiche.getCotisationsSalariales()), formatBigDecimal(totalPatronal));
         }
+
+        // NOUVEAU : À la toute fin, on ajoute une ligne pour fermer le tableau proprement.
+        ajouterLigneFermeture(table);
 
         return table;
     }
@@ -143,15 +165,11 @@ public class FichePaiePdfGenerateur {
                 type == TypeElement.PRIME_FIXE || type == TypeElement.PRIME_VARIABLE || type == TypeElement.INDEMNITE;
     }
 
-    // Méthode utilitaire ajoutée pour identifier les cotisations
     private static boolean isCotisationType(TypeElement type) {
         return type == TypeElement.COTISATION_SOCIALE;
     }
 
-    // ==================================================================================
-    // --- LES AUTRES MÉTHODES RESTENT INCHANGÉES ---
-    // ==================================================================================
-
+    // --- Les autres méthodes de création de PDF restent inchangées ---
     private static PdfPTable creerTableEnTete(FichePaie fiche) throws DocumentException {
         PdfPTable layoutTable = new PdfPTable(2);
         layoutTable.setWidthPercentage(100);
@@ -164,9 +182,8 @@ public class FichePaiePdfGenerateur {
         pSociete.add(new Chunk("STE : ........................\n", FONT_NORMAL));
         pSociete.add(new Chunk("Tél : ........................\n\n", FONT_NORMAL));
         pSociete.add(new Chunk("CNSS N° : ........................\n\n", FONT_NORMAL));
-
         pSociete.add(new Chunk("N° CIN: "+ fiche.getEmploye().getCin() +"\n\n", FONT_NORMAL));
-        pSociete.add(new Chunk("N° CNSS: 55252525\n\n", FONT_NORMAL));
+        pSociete.add(new Chunk("N° CNSS: à ajouter\n\n", FONT_NORMAL));
         pSociete.add(new Chunk("Date Embauche : "+ fiche.getEmploye().getDateEmbauche() +"\n\n", FONT_NORMAL));
         pSociete.add(new Chunk("Emploi occupé : "+ fiche.getEmploye().getPoste() +"\n", FONT_NORMAL));
         societeInfoCell.addElement(pSociete);
@@ -199,7 +216,7 @@ public class FichePaiePdfGenerateur {
         cell.setBorder(Rectangle.BOX);
         cell.setPadding(8);
         Paragraph p = new Paragraph();
-        p.add(new Chunk("Paiement le : __________ Par: virement Ou cheque\n\n", FONT_NORMAL));
+        p.add(new Chunk("Paiement le : "+ fiche.getPeriode() +" Par: virement Ou cheque\n\n", FONT_NORMAL));
         p.add(new Chunk("Matricule : " + fiche.getEmploye().getNumeroEmploye() , FONT_NORMAL));
         p.add(new Chunk("*\n", FONT_RED));
         String prenom = fiche.getEmploye().getPreNom() != null ? fiche.getEmploye().getPreNom() : "";
@@ -213,34 +230,30 @@ public class FichePaiePdfGenerateur {
     }
 
     private static PdfPTable creerTableauRecapitulatif(FichePaie fiche) throws DocumentException {
-        PdfPTable table = new PdfPTable(9);
+        PdfPTable table = new PdfPTable(8);
         table.setWidthPercentage(100);
-        table.setWidths(new float[]{1.5f, 1.5f, 1.5f, 1.5f, 1.5f, 1.5f, 1.2f, 1.5f, 1.8f});
+        table.setWidths(new float[]{1.8f, 1.5f, 1.5f, 1.5f, 1.5f, 1.2f, 1.5f, 1.8f});
 
         table.addCell(creerCelluleHeader("Cumul", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("Salaire Brut", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("Charges salariales", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("Charges Patronale", FONT_HEADER_TABLE));
-        table.addCell(creerCelluleHeader("Avantages en nature", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("Net imposable", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("jours travaillés", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("Heures supplém.", FONT_HEADER_TABLE));
         table.addCell(creerCelluleHeader("NET A PAYER", FONT_HEADER_TABLE));
 
-        // TODO: Vous devez ajouter les méthodes getChargesPatronales(), getAvantagesEnNature(), getJoursTravailles() à votre classe FichePaie
-        BigDecimal chargesPatronales = BigDecimal.ZERO;
-        BigDecimal avantagesNature = BigDecimal.ZERO; // Remplacez par fiche.getAvantagesEnNature()
-        int joursTravailles = 26; // Remplacez par fiche.getJoursTravailles()
+        BigDecimal chargesPatronales = fiche.getCotisationsPatronales();
+        int joursTravailles = fiche.getJoursTravailles();
 
-        table.addCell(creerCelluleDonnee("Période " + fiche.getPeriode().toString(), Element.ALIGN_LEFT));
-        table.addCell(creerCelluleDonnee(formatBigDecimal(fiche.getSalaireBrut()), Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(formatBigDecimal(fiche.getCotisationsSalariales()), Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(formatBigDecimal(chargesPatronales), Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(formatBigDecimal(avantagesNature), Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(formatBigDecimal(fiche.getSalaireNetImposable()), Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(String.valueOf(joursTravailles), Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(formatBigDecimal(fiche.getSalaireNet()), Element.ALIGN_RIGHT, FONT_BOLD));
+        table.addCell(creerCelluleDonneeAvecBordureComplete("Période " + fiche.getPeriode().toString(), Element.ALIGN_LEFT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(formatBigDecimal(fiche.getSalaireBrut()), Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(formatBigDecimal(fiche.getCotisationsSalariales()), Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(formatBigDecimal(chargesPatronales), Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(formatBigDecimal(fiche.getSalaireNetImposable()), Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(String.valueOf(joursTravailles), Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(fiche.getHeuresSupplementaires().toString(), Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(formatBigDecimal(fiche.getSalaireNet()), Element.ALIGN_RIGHT, FONT_BOLD));
 
         return table;
     }
@@ -259,12 +272,11 @@ public class FichePaiePdfGenerateur {
         table.addCell(creerCelluleHeader("Retenue", FONT_HEADER_TABLE));
     }
 
-    private static void ajouterLigneGain(PdfPTable table, String designation, String base, String nombre, String gain) {
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_CENTER));
-        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT));
+    private static void ajouterLigneGain(PdfPTable table, String designation, String base, String nombre, String gain, String taux) {
+        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT, 2));
         table.addCell(creerCelluleDonnee(nombre, Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee(base, Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(taux, Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee(gain, Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
@@ -272,8 +284,7 @@ public class FichePaiePdfGenerateur {
     }
 
     private static void ajouterLigneCotisation(PdfPTable table, String designation, String base, String tauxSalarial, String retenueSalariale) {
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_CENTER));
-        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT));
+        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT, 2));
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee(base, Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee(tauxSalarial, Element.ALIGN_RIGHT));
@@ -283,9 +294,30 @@ public class FichePaiePdfGenerateur {
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
     }
 
+    private static void ajouterLigneCotisationPatronales(PdfPTable table, String designation, String base, String tauxSalarial, String retenueSalariale) {
+        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT, 2));
+        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(base, Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(tauxSalarial, Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(retenueSalariale, Element.ALIGN_RIGHT));
+    }
+
+    private static void ajouterLigneCotisationCNSS(PdfPTable table, String designation, String base, String tauxSalarial, String retenueSalariale, String tauxPatronale, String retenuePatronale) {
+        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT, 2));
+        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(base, Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(tauxSalarial, Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(retenueSalariale, Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(tauxPatronale, Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonnee(retenuePatronale, Element.ALIGN_RIGHT));
+    }
+
     private static void ajouterLigneRetenue(PdfPTable table, String designation, String retenue) {
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_CENTER));
-        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT));
+        table.addCell(creerCelluleDonnee(designation, Element.ALIGN_LEFT, 2));
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
@@ -295,41 +327,41 @@ public class FichePaiePdfGenerateur {
         table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
     }
 
+    // MODIFIÉ : Utilise maintenant `creerCelluleDonneeAvecBordureComplete` pour être explicite
     private static void ajouterLigneTotale(PdfPTable table, String libelle, String montant, int colMontant) {
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_CENTER));
-        PdfPCell cellLibelle = creerCelluleDonnee(libelle, Element.ALIGN_LEFT, FONT_BOLD);
+        table.addCell(creerCelluleDonneeAvecBordureComplete("", Element.ALIGN_CENTER));
+        PdfPCell cellLibelle = creerCelluleDonneeAvecBordureComplete(libelle, Element.ALIGN_LEFT, FONT_BOLD);
         cellLibelle.setColspan(3);
         table.addCell(cellLibelle);
-        for (int i = 4; i < 9; i++) {
-            if (i == colMontant) {
-                PdfPCell cellMontant = creerCelluleDonnee(montant, Element.ALIGN_LEFT, FONT_BOLD);
-                cellMontant.setColspan(2);
-                table.addCell(cellMontant);
-                i++;
-            } else {
-                table.addCell(creerCelluleDonnee("", Element.ALIGN_LEFT));
-            }
+        PdfPCell cellMontant = creerCelluleDonneeAvecBordureComplete(montant, Element.ALIGN_RIGHT, FONT_BOLD);
+        cellMontant.setColspan(2);
+        table.addCell(cellMontant);
+        for (int i = 6; i < 9; i++) {
+            table.addCell(creerCelluleDonneeAvecBordureComplete("", Element.ALIGN_LEFT));
         }
     }
 
+    // MODIFIÉ : Utilise maintenant `creerCelluleDonneeAvecBordureComplete`
     private static void ajouterLigneTotaleCotisations(PdfPTable table, String libelle, String montantSalarial, String montantPatronal) {
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_CENTER));
-        PdfPCell cellLibelle = creerCelluleDonnee(libelle, Element.ALIGN_LEFT, FONT_BOLD);
+        table.addCell(creerCelluleDonneeAvecBordureComplete("", Element.ALIGN_CENTER));
+        PdfPCell cellLibelle = creerCelluleDonneeAvecBordureComplete(libelle, Element.ALIGN_LEFT, FONT_BOLD);
         cellLibelle.setColspan(5);
         table.addCell(cellLibelle);
-        table.addCell(creerCelluleDonnee(montantSalarial, Element.ALIGN_RIGHT, FONT_BOLD));
-        table.addCell(creerCelluleDonnee("", Element.ALIGN_RIGHT));
-        table.addCell(creerCelluleDonnee(montantPatronal, Element.ALIGN_RIGHT, FONT_BOLD));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(montantSalarial, Element.ALIGN_RIGHT, FONT_BOLD));
+        table.addCell(creerCelluleDonneeAvecBordureComplete("", Element.ALIGN_RIGHT));
+        table.addCell(creerCelluleDonneeAvecBordureComplete(montantPatronal, Element.ALIGN_RIGHT, FONT_BOLD));
     }
 
-    private static void ajouterLigneSeparation(PdfPTable table) {
-        // Ajoute une ligne vide avec seulement des bordures gauche et droite pour l'esthétique
-        for (int i = 0; i < 9; i++) {
-            PdfPCell emptyCell = new PdfPCell(new Phrase(" "));
-            emptyCell.setBorder(Rectangle.LEFT | Rectangle.RIGHT);
-            table.addCell(emptyCell);
-        }
+    // NOUVELLE MÉTHODE : Pour ajouter la ligne de fermeture en bas du tableau
+    private static void ajouterLigneFermeture(PdfPTable table) {
+        PdfPCell bottomCell = new PdfPCell(new Phrase(" "));
+        bottomCell.setColspan(9); // S'étend sur toute la largeur
+        bottomCell.setBorder(Rectangle.TOP); // Dessine une ligne en haut de cette cellule (qui est en bas)
+        bottomCell.setFixedHeight(0.5f); // La rend très fine
+        table.addCell(bottomCell);
     }
+
+    // --- Méthodes de création de cellules ---
 
     private static PdfPCell creerCellule(String content, Font font, int horizontalAlignment) {
         PdfPCell cell = new PdfPCell(new Phrase(content, font));
@@ -353,27 +385,41 @@ public class FichePaiePdfGenerateur {
         return cell;
     }
 
+    // Cellule pour les lignes de données (bordures latérales uniquement)
+    private static PdfPCell creerCelluleDonnee(String content, int horizontalAlignment, Font font) {
+        PdfPCell cell = creerCellule(content, font, horizontalAlignment);
+        cell.setBorder(Rectangle.LEFT | Rectangle.RIGHT);
+        return cell;
+    }
+
     private static PdfPCell creerCelluleDonnee(String content, int horizontalAlignment) {
         return creerCelluleDonnee(content, horizontalAlignment, FONT_NORMAL);
     }
 
-    private static PdfPCell creerCelluleDonnee(String content, int horizontalAlignment, Font font) {
-        PdfPCell cell = creerCellule(content, font, horizontalAlignment);
-        cell.setBorder(Rectangle.LEFT | Rectangle.RIGHT | Rectangle.BOTTOM | Rectangle.TOP);
+    private static PdfPCell creerCelluleDonnee(String content, int horizontalAlignment, int colspan) {
+        PdfPCell cell = creerCelluleDonnee(content, horizontalAlignment, FONT_NORMAL);
+        cell.setColspan(colspan);
         return cell;
     }
 
+    // Cellule pour les totaux et le récapitulatif (bordures complètes)
+    private static PdfPCell creerCelluleDonneeAvecBordureComplete(String content, int horizontalAlignment, Font font) {
+        PdfPCell cell = creerCellule(content, font, horizontalAlignment);
+        cell.setBorder(Rectangle.BOX);
+        return cell;
+    }
+
+    private static PdfPCell creerCelluleDonneeAvecBordureComplete(String content, int horizontalAlignment) {
+        return creerCelluleDonneeAvecBordureComplete(content, horizontalAlignment, FONT_NORMAL);
+    }
+
     private static String formatBigDecimal(BigDecimal value) {
-        if (value == null || value.compareTo(BigDecimal.ZERO) == 0) {
-            return "";
-        }
+        if (value == null || value.compareTo(BigDecimal.ZERO) == 0) return "";
         return String.format("%,.2f", value);
     }
 
     private static String formatTaux(BigDecimal taux) {
-        if (taux == null || taux.compareTo(BigDecimal.ZERO) == 0) {
-            return "";
-        }
+        if (taux == null || taux.compareTo(BigDecimal.ZERO) == 0) return "";
         return formatBigDecimal(taux) + "%";
     }
 }

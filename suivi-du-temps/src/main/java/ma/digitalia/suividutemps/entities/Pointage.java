@@ -2,6 +2,7 @@ package ma.digitalia.suividutemps.entities;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -72,6 +73,7 @@ public class Pointage {
     @JsonIgnore
     private Employe employe;
 
+    @JsonManagedReference
     @OneToMany(mappedBy = "pointage", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("debut ASC")
     private List<Activite> activites = new ArrayList<>();
@@ -104,5 +106,14 @@ public class Pointage {
         }
 
         return heuresTravaillees;
+    }
+
+    public int getMinutesPause() {
+        Duration tempsPause = activites.stream()
+                .filter(activite -> activite.getType() == ma.digitalia.suividutemps.Enum.TypeActivite.PAUSE)
+                .filter(activite -> activite.getDebut() != null && activite.getFin() != null)
+                .map(activite -> Duration.between(activite.getDebut(), activite.getFin()))
+                .reduce(Duration.ZERO, Duration::plus);
+        return tempsPause != null ? Math.toIntExact(tempsPause.toMinutes()) : 0;
     }
 }

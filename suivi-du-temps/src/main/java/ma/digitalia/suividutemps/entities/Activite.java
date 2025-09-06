@@ -1,5 +1,6 @@
 package ma.digitalia.suividutemps.entities;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -25,6 +26,7 @@ public class Activite {
     private String description; // Champ crucial pour décrire ce que l'employé fait
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JsonBackReference
     @JoinColumn(name = "pointage_id")
     private Pointage pointage;
 

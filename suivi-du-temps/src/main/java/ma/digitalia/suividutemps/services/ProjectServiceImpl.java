@@ -109,6 +109,9 @@ public class ProjectServiceImpl implements ProjectService {
             dto.nom = projet.getNom();
             dto.client = projet.getClient();
             dto.description = projet.getDescription();
+            dto.dateDebut = projet.getDateDebut();
+            dto.dateFinPrevue = projet.getDateFinPrevue();
+            dto.budget = projet.getBudget();
             dto.taches = new ArrayList<>();
             if (projet.getTaches() != null) {
                 for (Tache tache : projet.getTaches()) {

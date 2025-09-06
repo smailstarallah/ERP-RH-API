@@ -7,6 +7,7 @@ public enum TypeElement {
     HEURES_SUPPLEMENTAIRES,
     INDEMNITE,              // Indemnités diverses (transport, repas...)
     DEDUCTION_ABSENCE,      // Retenues pour absences
+    DEDUCTION_RETARD,       // Retenues pour retards
     DEDUCTION_AUTRE,        // Autres déductions (pénalités...)
     COTISATION_SOCIALE,     // CNSS, AMO, CIMR...
     IMPOT,                  // IR, taxe pro...

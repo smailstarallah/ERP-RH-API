@@ -3,6 +3,7 @@ package ma.digitalia.suividutemps.services;
 import ma.digitalia.gestionutilisateur.entities.Employe;
 import ma.digitalia.suividutemps.entities.RapportTemps;
 
+import java.math.BigDecimal;
 import java.time.Month;
 import java.time.YearMonth;
 
@@ -31,4 +32,12 @@ public interface RapportTempsService {
      * @return le rapport mensuel de l'employé pour le mois spécifié
      */
     RapportTemps getMonthlyReport(Employe employe, YearMonth yearMonth);
+
+    /**
+     * Calculer le nombre d'absences pour un employé donné sur un mois spécifié
+     * @param employe l'employé pour lequel le nombre d'absences est calculé
+     * @param yearMonth l'année et le mois pour lequel le nombre d'absences est calculé
+     * @return le nombre d'absences de l'employé pour le mois spécifié
+     */
+    BigDecimal getNombreAbsences(Employe employe, YearMonth yearMonth);
 }

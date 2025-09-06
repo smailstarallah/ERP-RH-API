@@ -32,7 +32,7 @@ public class RapportTempsServiceImpl implements RapportTempsService {
         this.pointageRepository = pointageRepository;
         this.employeRepository = employeRepository;
         this.planningTravailRepository = planningTravailRepository;
-        generateMonthlyReport(2L, Month.AUGUST);
+        generateMonthlyReport(2L, Month.SEPTEMBER);
     }
 
     @Override
@@ -131,7 +131,7 @@ public class RapportTempsServiceImpl implements RapportTempsService {
             }
             int joursAbsence = rapportTemps.getNombreJoursAbsence();
             int joursPresence = totalJoursTravail - joursAbsence;
-
+            rapportTemps.setNombreJoursTravail(totalJoursTravail);
             if (totalJoursTravail > 0) {
                 BigDecimal tauxPresence = BigDecimal.valueOf(joursPresence)
                         .divide(BigDecimal.valueOf(totalJoursTravail), 4, RoundingMode.HALF_UP)
@@ -159,7 +159,18 @@ public class RapportTempsServiceImpl implements RapportTempsService {
             throw new IllegalArgumentException("L'identifiant de l'employé et le mois ne peuvent pas être nuls");
         }
         RapportTemps rapportTemps = rapportTempsRepository.findByEmployeAndPeriode(employe, yearMonth.toString());
+        if (rapportTemps == null) {
+            generateMonthlyReport(employe.getId(), yearMonth.getMonth());
+            rapportTemps = rapportTempsRepository.findByEmployeAndPeriode(employe, yearMonth.toString());
+        }
+
         return rapportTemps;
+    }
+
+    @Override
+    public BigDecimal getNombreAbsences(Employe employe, YearMonth yearMonth) {
+        RapportTemps rapportTemps = rapportTempsRepository.findByEmployeAndPeriode(employe, yearMonth.toString());
+        return BigDecimal.valueOf(rapportTemps.getNombreJoursAbsence());
     }
 
 

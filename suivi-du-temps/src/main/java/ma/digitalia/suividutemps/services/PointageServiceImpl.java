@@ -7,6 +7,7 @@ import ma.digitalia.gestionutilisateur.entities.Employe;
 import ma.digitalia.gestionutilisateur.entities.Manager;
 import ma.digitalia.gestionutilisateur.services.EmployeService;
 import ma.digitalia.gestionutilisateur.services.ManagerService;
+import ma.digitalia.suividutemps.Enum.Priority;
 import ma.digitalia.suividutemps.Enum.StatutPointage;
 import ma.digitalia.suividutemps.Enum.TypeActivite;
 import ma.digitalia.suividutemps.dto.*;
@@ -150,22 +151,64 @@ public class PointageServiceImpl implements PointageService {
     }
 
     @Override
-    public List<Pointage> getPointagesSemaineByEmploye(Long employeId, LocalDate date) {
-        try {
-            Employe employe = employeService.findById(employeId);
-            LocalDate lundi = date.with(previousOrSame(DayOfWeek.MONDAY));
-            LocalDate dimanche = date.with(nextOrSame(DayOfWeek.SUNDAY));
-            List<Pointage> pointages = pointageRepository.findByEmployeAndDateBetween(employe, lundi, dimanche);
-            if (pointages == null) {
-                log.warn("Aucun pointage trouvé pour l'employé ID: {} et la date: {}", employeId, date);
-                throw new RuntimeException("Aucun pointage trouvé pour l'employé et la date spécifiés.");
+    public WeeklyPointageDto getPointagesSemaineByEmploye(Long employeId, LocalDate date) {
+        Employe employe = employeService.findById(employeId);
+        LocalDate lundi = date.with(previousOrSame(DayOfWeek.MONDAY));
+        LocalDate dimanche = date.with(nextOrSame(DayOfWeek.SUNDAY));
+        List<Pointage> pointages = pointageRepository.findByEmployeAndDateBetween(employe, lundi, dimanche);
+        Map<LocalDate, Pointage> pointagesParDate = pointages.stream()
+                .collect(Collectors.toMap(Pointage::getDate, p -> p));
+        List<WeekRowDto> weekRows = new ArrayList<>();
+        double totalHours = 0;
+        int absences = 0;
+        int lateArrivals = 0;
+        int totalArrivalMinutes = 0;
+        int arrivalCount = 0;
+        double overtimeHours = 0;
+        LocalDate jourCourant = lundi;
+        while (!jourCourant.isAfter(dimanche)) {
+            Pointage p = pointagesParDate.get(jourCourant);
+            String arrivee = "—";
+            String sortie = "—";
+            int effective = 0;
+            int pauses = 0;
+            String retard = "—";
+            // Correction: calculer les pauses à partir des activités de type PAUSE
+            if (p != null && p.getActivites() != null) {
+                for (Activite activite : p.getActivites()) {
+                    if (activite.getType() == TypeActivite.PAUSE && activite.getDebut() != null && activite.getFin() != null) {
+                        pauses += (int) java.time.Duration.between(activite.getDebut(), activite.getFin()).toMinutes();
+                    }
+                }
             }
-            log.info("Pointage récupéré pour l'employé ID: {} et la date: {}", employeId, date);
-            return pointages;
-        } catch (Exception e) {
-            log.error("Erreur lors de la recuperation du pointage by employe id : {}", e.getMessage());
-            throw new RuntimeException("Erreur lors de la récupération du pointage", e);
+            if (p != null) {
+                if (p.getHeureEntree() != null) {
+                    arrivee = String.format("%02d:%02d", p.getHeureEntree().getHour(), p.getHeureEntree().getMinute());
+                    arrivalCount++;
+                    totalArrivalMinutes += p.getHeureEntree().getHour() * 60 + p.getHeureEntree().getMinute();
+                    // Supposons que l'heure normale d'arrivée est 08:45
+                    int retardMinutes = (p.getHeureEntree().getHour() * 60 + p.getHeureEntree().getMinute()) - (8 * 60 + 45);
+                    if (retardMinutes > 0) {
+                        retard = retardMinutes + "m";
+                        lateArrivals++;
+                    }
+                }
+                if (p.getHeureSortie() != null) {
+                    sortie = String.format("%02d:%02d", p.getHeureSortie().getHour(), p.getHeureSortie().getMinute());
+                }
+                if (p.getHeuresTravaillees() != null) {
+                    effective = (int) p.getHeuresTravaillees().toMinutes();
+                    totalHours += effective / 60.0;
+                }
+            } else {
+                absences++;
+            }
+            weekRows.add(new WeekRowDto(jourCourant.toString(), arrivee, sortie, effective, pauses, retard));
+            jourCourant = jourCourant.plusDays(1);
         }
+        String averageArrival = arrivalCount > 0 ? String.format("%02d:%02d", totalArrivalMinutes / arrivalCount / 60, totalArrivalMinutes / arrivalCount % 60) : "—";
+        WeekStatsDto weekStats = new WeekStatsDto(totalHours, averageArrival, overtimeHours, absences, lateArrivals);
+        return new WeeklyPointageDto(weekStats, weekRows);
     }
 
     @Override
@@ -216,17 +259,91 @@ public class PointageServiceImpl implements PointageService {
         if(!managerService.existsById(managerId)){
             throw new EntityNotFoundException("Manager with ID " + managerId + " not found.");
         }
+        log.info("Récupération du manager avec ID: {}", managerId);
         Manager manager = managerService.findById(managerId);
+        String department = manager.getDepartment();
+        log.info("Récupération des employés pour le manager ID: {} dans le département: {}", managerId, department);
         List<Employe> equipe = manager.getEmployes();
         if (equipe == null || equipe.isEmpty()) {
             log.warn("Le manager ID: {} n'a pas d'employés dans son équipe.", managerId);
             return List.of();
         }
+        log.info("Récupération du statut de l'équipe pour le manager ID: {} avec {} employés.", managerId, equipe.size());
         List<TeamStatusDto> teamStatusList = new ArrayList<>();
         for (Employe employe : equipe) {
             Pointage pointage = pointageRepository.findByEmployeAndDate(employe, date);
             boolean isConnected = pointage != null && pointage.getHeureEntree() != null && pointage.getHeureSortie() == null;
             int todayHours = 0;
+            String avatar = "";
+            String managerName = manager.getNom() + " " + manager.getPreNom();
+            // Dernière activité du jour
+            String lastActivity = null;
+            String availabilityStatus = "indisponible";
+            log.info("Traitement de l'employé ID: {} - {}", employe.getId(), employe.getNom());
+            if (pointage != null && pointage.getActivites() != null && !pointage.getActivites().isEmpty()) {
+                Activite last = pointage.getActivites().stream()
+                    .max(Comparator.comparing(Activite::getDebut)).orElse(null);
+                if (last != null) {
+                    lastActivity = last.getDebut().toString();
+                    switch (last.getType()) {
+                        case TRAVAIL: availabilityStatus = "disponible"; break;
+                        case PAUSE: availabilityStatus = "pause"; break;
+                        case REUNION: availabilityStatus = "reunion"; break;
+                        default: availabilityStatus = "occupe";
+                    }
+                }
+            }
+            log.info("Dernière activité pour l'employé ID: {} - {}", employe.getId(), lastActivity);
+            // Calcul des heures de la semaine, retards, heures supp, objectif
+            LocalDate lundi = date.with(previousOrSame(DayOfWeek.MONDAY));
+            LocalDate dimanche = date.with(nextOrSame(DayOfWeek.SUNDAY));
+            List<Pointage> weekPointages = pointageRepository.findByEmployeAndDateBetween(employe, lundi, dimanche);
+            double weeklyHours = 0;
+            int lateArrivalCount = 0;
+            double overTimeHours = 0;
+            double targetHours = 0;
+            log.info("Calcul des statistiques hebdomadaires pour l'employé ID: {} entre {} et {}", employe.getId(), lundi, dimanche);
+            for (Pointage p : weekPointages) {
+                if (p.getHeuresTravaillees() != null) {
+                    weeklyHours += p.getHeuresTravaillees().toMinutes() / 60.0;
+                }
+                if (p.getHeureEntree() != null) {
+                    int retardMinutes = (p.getHeureEntree().getHour() * 60 + p.getHeureEntree().getMinute()) - (8 * 60 + 45);
+                    if (retardMinutes > 0) lateArrivalCount++;
+                }
+                // Heures supp
+                PlanningTravail planning = planningTravailRepository.findByJourSemaine(p.getDate().getDayOfWeek());
+                if (planning != null && p.getHeuresTravaillees() != null && planning.getHeuresParJour() != null) {
+                    double planned = planning.getHeuresParJour().toMinutes() / 60.0;
+                    double worked = p.getHeuresTravaillees().toMinutes() / 60.0;
+                    if (worked > planned) overTimeHours += (worked - planned);
+                    targetHours += planned;
+                }
+            }
+            log.info("Statistiques pour l'employé ID: {} - Heures hebdo: {}, Retards: {}, Heures supp: {}, Objectif: {}",
+                    employe.getId(), weeklyHours, lateArrivalCount, overTimeHours, targetHours);
+            // Performance simple (à affiner selon vos critères)
+            String performance = "moyen";
+            if (weeklyHours >= targetHours && lateArrivalCount == 0) performance = "excellent";
+            else if (weeklyHours >= targetHours * 0.8) performance = "bon";
+            else if (weeklyHours >= targetHours * 0.5) performance = "moyen";
+            else performance = "faible";
+            // Tâches urgentes
+            int urgentTasks = 0;
+
+            List<Tache> taches = weekPointages.stream()
+                .filter(p -> p.getActivites() != null)
+                .flatMap(p -> p.getActivites().stream())
+                .map(Activite::getTache)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+            log.info("Nombre de tâches associées aux pointages de la semaine pour l'employé ID: {} - {}", employe.getId(), taches.size());
+
+            urgentTasks = (int) taches.stream()
+                .filter(t -> t.getPriority() != null && (t.getPriority() == Priority.CRITICAL || t.getPriority() == Priority.HIGH )&& !t.isTerminee())
+                .count();
+
             if (pointage != null && pointage.calculerHeuresTravaillees() != null) {
                 todayHours = (int) pointage.getHeuresTravaillees().toMinutes();
             }
@@ -236,6 +353,17 @@ public class PointageServiceImpl implements PointageService {
                     .role(employe.getPoste() != null ? employe.getPoste() : "")
                     .isConnected(isConnected)
                     .todayHours(todayHours)
+                    .avatar(avatar)
+                    .lastActivity(lastActivity)
+                    .performance(performance)
+                    .weeklyHours(weeklyHours)
+                    .targetHours(targetHours)
+                    .lateArrivalCount(lateArrivalCount)
+                    .overTimeHours(overTimeHours)
+                    .department(department)
+                    .manager(managerName)
+                    .urgentTasks(urgentTasks)
+                    .availabilityStatus(availabilityStatus)
                     .build();
             teamStatusList.add(dto);
         }
@@ -323,33 +451,6 @@ public class PointageServiceImpl implements PointageService {
         return new MonthlyPresenceReportDto(summary, dailyPunches);
     }
 
-    @Override
-    public List<ActivityOfDayDto> getActivitiesOfDay(Long empId) {
-        List<ActivityOfDayDto> result = new ArrayList<>();
-        Employe employe = employeService.findById(empId);
-        Pointage pointage = pointageRepository.findByEmployeAndDate(employe, java.time.LocalDate.now());
-        if (pointage == null || pointage.getActivites() == null) return result;
-        for (Activite activite : pointage.getActivites()) {
-            ActivityOfDayDto dto = new ActivityOfDayDto();
-            dto.type = activite.getType().name();
-            dto.startTime = activite.getDebut() != null ? activite.getDebut().toString() : null;
-            dto.endTime = activite.getFin() != null ? activite.getFin().toString() : null;
-            dto.description = activite.getDescription();
-            if (activite.getTache() != null) {
-                ActivityOfDayDto.TaskDto taskDto = new ActivityOfDayDto.TaskDto();
-                taskDto.id = activite.getTache().getId() != null ? activite.getTache().getId().toString() : null;
-                taskDto.name = activite.getTache().getNom();
-                taskDto.priority = activite.getTache().getPriority() != null ? activite.getTache().getPriority().name() : null;
-                dto.task = taskDto;
-            }
-            if (activite.getProjet() != null) {
-                dto.projectName = activite.getProjet().getNom();
-            }
-            result.add(dto);
-        }
-        return result;
-    }
-
     // pour calendar à ajuster ulterieurement
     private PunchDto mapPointageToPunchDto(Pointage pointage, int dailyObjective) {
         String id = pointage.getId() != null ? "punch_" + pointage.getId() : null;
@@ -429,5 +530,140 @@ public class PointageServiceImpl implements PointageService {
             }
         }
         return new PunchDto(id, date, start, end, status, effectiveWorkMinutes, totalPauseMinutes, overtime, location, pauses, anomalies, dailyObjective);
+    }
+
+    @Override
+    public List<ActivityOfDayDto> getActivitiesOfDay(Long empId) {
+        Employe employe = employeService.findById(empId);
+        LocalDate today = LocalDate.now();
+        Pointage pointageToday = pointageRepository.findByEmployeAndDate(employe, today);
+
+        if (pointageToday == null) {
+            return Collections.emptyList();
+        }
+
+        return pointageToday.getActivites().stream()
+                .map(activite -> {
+                    ActivityOfDayDto dto = new ActivityOfDayDto();
+                    dto.setType(activite.getType().name());
+                    dto.setStartTime(activite.getDebut() != null ? activite.getDebut().toString() : null);
+                    dto.setEndTime(activite.getFin() != null ? activite.getFin().toString() : null);
+                    dto.setDescription(activite.getDescription());
+                    dto.setProjectName(activite.getProjet() != null ? activite.getProjet().getNom() : null);
+
+                    if (activite.getTache() != null) {
+                        ActivityOfDayDto.TaskDto taskDto = new ActivityOfDayDto.TaskDto();
+                        taskDto.id = String.valueOf(activite.getTache().getId());
+                        taskDto.name = activite.getTache().getNom();
+                        taskDto.priority = activite.getTache().getPriority() != null ? activite.getTache().getPriority().name() : "NORMAL";
+                        dto.setTask(taskDto);
+                    }
+
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public PointageResponseDto getPointagesForWeek(LocalDate weekStart, Long employeId) {
+        LocalDate weekEnd = weekStart.plusDays(6);
+
+        Employe employe = employeService.findById(employeId);
+
+        // Récupérer toutes les activités de la semaine
+        List<Activite> activites = activiteRepo.findByEmployeAndPointageDateBetweenOrderByDebutAsc(employe, weekStart, weekEnd);
+
+        // Mapper les activités vers le DTO
+        List<PointageActivityDto> activities = activites.stream()
+                .map(this::mapActiviteToDto)
+                .collect(Collectors.toList());
+
+        // Récupérer la planification de la semaine
+        List<PointagePlannedDto> planned = getPlannedHoursForWeek(weekStart);
+
+        return new PointageResponseDto(activities, planned);
+    }
+
+    private PointageActivityDto mapActiviteToDto(Activite activite) {
+        String type;
+        if (activite.getType() == TypeActivite.TRAVAIL) {
+            type = "WORK";
+        } else if (activite.getType() == TypeActivite.PAUSE) {
+            type = "BREAK";
+        } else if (activite.getType() == TypeActivite.REUNION) {
+            type = "MEETING";
+        } else {
+            type = activite.getType().name(); // fallback
+        }
+
+        PointageProjectDto projectDto = null;
+        if (activite.getProjet() != null) {
+            projectDto = new PointageProjectDto(
+                    activite.getProjet().getId(),
+                    activite.getProjet().getNom(),
+                    "#3498db", // couleur par défaut - à adapter selon vos besoins
+                    activite.getProjet().getClient()
+            );
+        }
+
+        return new PointageActivityDto(
+                String.valueOf(activite.getId()),
+                type,
+                activite.getDescription(),
+                activite.getDebut(),
+                activite.getFin(),
+                projectDto
+        );
+    }
+
+    private List<PointagePlannedDto> getPlannedHoursForWeek(LocalDate weekStart) {
+        List<PointagePlannedDto> planned = new ArrayList<>();
+
+        for (int i = 0; i < 7; i++) {
+            LocalDate currentDate = weekStart.plusDays(i);
+            DayOfWeek dayOfWeek = currentDate.getDayOfWeek();
+
+            // Convertir DayOfWeek en format attendu (0 = Dimanche, 1 = Lundi, etc.)
+            int dayOfWeekValue = (dayOfWeek.getValue() % 7);
+
+            PlanningTravail planning = planningTravailRepository.findByJourSemaine(dayOfWeek);
+
+            if (planning != null && planning.getHeuresParJour() != null) {
+                // Pour simplifier, on suppose un seul projet par jour
+                PointageProjectDto projectDto = getDefaultProjectForDay();
+
+                if (projectDto != null) {
+                    planned.add(new PointagePlannedDto(
+                            dayOfWeekValue,
+                            projectDto,
+                            (int) planning.getHeuresParJour().toHours()
+                    ));
+                }
+            }
+        }
+
+        return planned;
+    }
+
+    private PointageProjectDto getDefaultProjectForDay() {
+        // Utiliser une requête plus simple pour éviter les erreurs
+        List<Projet> projets = projetRepo.findAll();
+
+        if (!projets.isEmpty()) {
+            Projet projet = projets.get(0);
+            return new PointageProjectDto(
+                    projet.getId(),
+                    projet.getNom(),
+                    "#2ecc71",
+                    projet.getClient()
+            );
+        }
+
+        return null;
+    }
+
+    @Override
+    public void startReunionTime(PointageRequest pointageRequest) {
+        demarrerOuChangerActivite(pointageRequest.getEmpId(), TypeActivite.REUNION, null, null, pointageRequest.getCommentaire());
     }
 }

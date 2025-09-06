@@ -43,6 +43,11 @@
         </dependency>
         <dependency>
             <groupId>ma.digitalia</groupId>
+            <artifactId>system-alert</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ma.digitalia</groupId>
             <artifactId>gestion-conges</artifactId>
             <version>${project.version}</version>
         </dependency>
