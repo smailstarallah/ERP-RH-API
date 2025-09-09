@@ -12,16 +12,15 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/conges-pris")
-@CrossOrigin(origins = "*")
 public class CongesPrisController {
 
     @Autowired
     private CongesPrisService congesPrisService;
 
     @GetMapping
-    public ResponseEntity<List<CongesPrisDTO>> getAllCongesPris() {
+    public ResponseEntity<List<CongesPrisDTO>> getAllCongesPris(@RequestParam Long userId) {
         try {
-            List<CongesPrisDTO> congesPris = congesPrisService.getAllCongesPris();
+            List<CongesPrisDTO> congesPris = congesPrisService.getAllCongesPris(userId);
             return ResponseEntity.ok(congesPris);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().build();

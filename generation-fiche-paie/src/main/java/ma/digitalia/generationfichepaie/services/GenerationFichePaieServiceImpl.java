@@ -12,7 +12,10 @@ import ma.digitalia.generationfichepaie.helpers.FichePaiePdfGenerateur;
 import ma.digitalia.generationfichepaie.repositories.ElementPaieRepository;
 import ma.digitalia.generationfichepaie.repositories.FichePaieRepository;
 import ma.digitalia.gestionutilisateur.entities.Employe;
+import ma.digitalia.gestionutilisateur.entities.Users;
 import ma.digitalia.gestionutilisateur.repositories.EmployeRepository;
+import ma.digitalia.gestionutilisateur.repositories.UsersRepository;
+import ma.digitalia.gestionutilisateur.services.ManagerService;
 import ma.digitalia.suividutemps.entities.RapportTemps;
 import ma.digitalia.suividutemps.services.RapportTempsService;
 import org.springframework.stereotype.Service;
@@ -36,13 +39,19 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
     private final EmployeRepository employeRepository;
     private final RapportTempsService rapportTempsService;
     private final FichePaieRepository fichePaieRepository;
+    private final UsersRepository usersRepository;
+    private final ManagerService managerService;
+
 
     public GenerationFichePaieServiceImpl(ElementPaieRepository elementPaieRepository, EmployeRepository employeRepository,
-                                          RapportTempsService rapportTempsService, FichePaieRepository fichePaieRepository) {
+                                          RapportTempsService rapportTempsService, FichePaieRepository fichePaieRepository,
+                                          UsersRepository usersRepository, ManagerService managerService) {
         this.elementPaieRepository = elementPaieRepository;
         this.employeRepository = employeRepository;
         this.rapportTempsService = rapportTempsService;
         this.fichePaieRepository = fichePaieRepository;
+        this.usersRepository = usersRepository;
+        this.managerService = managerService;
     }
 
 //    @PostConstruct
@@ -56,7 +65,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
 
     @Override
     public void ajouterElementPaie(Long employeId, ElementPaie elementPaie) {
-        log.info("Ajout d'un elementPaie {} pour l'employé avec l'ID : {}", elementPaie.getType() , employeId);
+        log.info("Ajout d'un elementPaie {} pour l'employé avec l'ID : {}", elementPaie.getType(), employeId);
 
         Employe employe = (Employe) employeRepository.findById(employeId)
                 .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé avec l'ID : " + employeId));
@@ -81,7 +90,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
 
     @Override
     public void ajouterElementPaie(Long employeId, AjoutElementPaieDTO elementPaie) {
-        log.info("Ajout d'un elementPaie {} pour l'employé avec l'ID : {}", elementPaie.getType() , employeId);
+        log.info("Ajout d'un elementPaie {} pour l'employé avec l'ID : {}", elementPaie.getType(), employeId);
 
         Employe employe = (Employe) employeRepository.findById(employeId)
                 .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé avec l'ID : " + employeId));
@@ -129,7 +138,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
                 return BigDecimal.ZERO;
             case PAR_HEURE:
 
-                if(elementPaie.getType() == HEURES_SUPPLEMENTAIRES){
+                if (elementPaie.getType() == HEURES_SUPPLEMENTAIRES) {
                     RapportTemps rapportTemps = rapportTempsService.getMonthlyReport(elementPaie.getEmploye(), YearMonth.now());
                     BigDecimal nombreHeuresSupplementaires = new BigDecimal(String.valueOf(rapportTemps.getTotalHeuresSupplementaires().toHours()));
                     System.out.println("éééééééééééééééééé");
@@ -137,7 +146,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
                     return nombreHeuresSupplementaires.multiply(elementPaie.getTaux());
                 }
 
-                if(elementPaie.getType() == DEDUCTION_RETARD){
+                if (elementPaie.getType() == DEDUCTION_RETARD) {
                     RapportTemps rapportTemps = rapportTempsService.getMonthlyReport(elementPaie.getEmploye(), YearMonth.now());
                     BigDecimal nombreJoursAbsence = new BigDecimal(rapportTemps.getNombreRetards());
                     System.out.println("éééééééééééééééééé");
@@ -150,7 +159,7 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
                 }
                 return BigDecimal.ZERO;
             case PAR_JOUR:
-                if (elementPaie.getType() == DEDUCTION_ABSENCE ){
+                if (elementPaie.getType() == DEDUCTION_ABSENCE) {
                     BigDecimal nombreAbs = rapportTempsService.getNombreAbsences(elementPaie.getEmploye(), periode);
                     System.out.println("éééééééééééééééééé");
                     System.out.println(rapportTempsService.getNombreAbsences(elementPaie.getEmploye(), periode));
@@ -331,20 +340,19 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
             cotisationCNSS = baseCNSS.multiply(tauxCNSS);
             cotisationAMO = baseCNSS.multiply(tauxAMO);
         }
-        if(!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Cotisation CNSS") ) {
             log.info("Ajout des cotisations CNSS à la fiche de paie.");
-            ElementPaie cnssElement = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,"Cotisation CNSS", "Cotisation CNSS", ModeCalcul.TAUX, cotisationCNSS
+            ElementPaie cnssElement = new ElementPaie(null, TypeElement.COTISATION_SOCIALE, "Cotisation CNSS", "Cotisation CNSS", ModeCalcul.TAUX, cotisationCNSS
                     , tauxCNSS.multiply(BigDecimal.valueOf(100)), baseCNSS, "Cotisation CNSS calculée automatiquement", false, false, null, null);
-
-            ajouterElementPaie(fichePaie.getEmploye().getId() ,cnssElement);
+            if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "Cotisation CNSS")) {
+            ajouterElementPaie(fichePaie.getEmploye().getId(), cnssElement);
         }
 
-        if(!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Cotisation AMO") ) {
             log.info("Ajout des cotisations AMO à la fiche de paie.");
-            ElementPaie amoElement = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,"cotisation AMO", "Cotisation AMO", ModeCalcul.TAUX, cotisationAMO
+            ElementPaie amoElement = new ElementPaie(null, TypeElement.COTISATION_SOCIALE, "cotisation AMO", "Cotisation AMO", ModeCalcul.TAUX, cotisationAMO
                     , tauxAMO.multiply(BigDecimal.valueOf(100)), baseCNSS, "Cotisation AMO calculée automatiquement", false, false, null, null);
+            if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "Cotisation AMO")) {
 
-            ajouterElementPaie(fichePaie.getEmploye().getId() ,amoElement);
+            ajouterElementPaie(fichePaie.getEmploye().getId(), amoElement);
         }
         cotisationsSalariales = cotisationsSalariales.add(cotisationCNSS).add(cotisationAMO);
         return cotisationsSalariales;
@@ -398,43 +406,39 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         log.info("Cotisation Formation Professionnelle : {}", cotisationFormationPro);
         log.info("Cotisation Allocations Familiales : {}", cotisationAllocationsFamiliales);
 
-        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"CNSS Patronale")) {
             log.info("Ajout des cotisations CNSS Patronale à la fiche de paie.");
             ElementPaie cnssPat = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
                     "Cotisation CNSS Patronale", "CNSS Patronale", ModeCalcul.TAUX, cotisationCNSSPatronale,
                     tauxCNSSPatronale.multiply(BigDecimal.valueOf(100)), baseCNSS,
                     "Cotisation CNSS part employeur", false, false, null, null);
-
+        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "CNSS Patronale")) {
             ajouterElementPaie(fichePaie.getEmploye().getId(), cnssPat);
         }
 
-        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"AMO Patronale")) {
             log.info("Ajout des cotisations AMO Patronale à la fiche de paie.");
             ElementPaie amoPat = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
                     "Cotisation AMO Patronale", "AMO Patronale", ModeCalcul.TAUX, cotisationAMOPatronale,
                     tauxAMOPatronale.multiply(BigDecimal.valueOf(100)), baseCNSS,
                     "Cotisation AMO part employeur", false, false, null, null);
-
+            if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "AMO Patronale")) {
             ajouterElementPaie(fichePaie.getEmploye().getId(), amoPat);
         }
 
-        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Formation Pro")) {
             log.info("Ajout des cotisations Formation Professionnelle à la fiche de paie.");
             ElementPaie formPro = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
                     "Cotisation Formation Professionnelle", "Formation Pro", ModeCalcul.TAUX, cotisationFormationPro,
                     tauxFormationPro.multiply(BigDecimal.valueOf(100)), baseCNSS,
                     "Cotisation Formation Pro part employeur", false, false, null, null);
-
+            if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "Formation Pro")) {
             ajouterElementPaie(fichePaie.getEmploye().getId(), formPro);
         }
 
-        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Allocations Familiales")) {
             log.info("Ajout des cotisations Allocations Familiales à la fiche de paie.");
             ElementPaie alloc = new ElementPaie(null, TypeElement.COTISATION_SOCIALE,
                     "Cotisation Allocations Familiales", "Allocations Familiales", ModeCalcul.TAUX, cotisationAllocationsFamiliales,
                     tauxAllocationsFamiliales.multiply(BigDecimal.valueOf(100)), baseCNSS,
                     "Cotisation Allocations Familiales part employeur", false, false, null, null);
-
+            if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "Allocations Familiales")) {
             ajouterElementPaie(fichePaie.getEmploye().getId(), alloc);
         }
 
@@ -500,11 +504,11 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         // 5. Impôt mensuel
         BigDecimal impotMensuel = impotAnnuel.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
         //ajouter element paie impot sur le revenu si n'existe pas
-        if(!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(),"Impôt sur le revenu") ) {
+        if (!elementPaieRepository.existsByEmployeAndLibelleContaining(fichePaie.getEmploye(), "Impôt sur le revenu")) {
             log.info("Ajout de l'impôt sur le revenu à la fiche de paie.");
-            ElementPaie irElement = new ElementPaie(null, TypeElement.IMPOT,"Impôt sur le revenu", "Impôt sur le revenu", ModeCalcul.TAUX, impotMensuel
+            ElementPaie irElement = new ElementPaie(null, TypeElement.IMPOT, "Impôt sur le revenu", "Impôt sur le revenu", ModeCalcul.TAUX, impotMensuel
                     , null, null, "Impôt sur le revenu calculé automatiquement", false, false, null, null);
-            ajouterElementPaie(fichePaie.getEmploye().getId() ,irElement);
+            ajouterElementPaie(fichePaie.getEmploye().getId(), irElement);
         }
         return impotMensuel;
     }
@@ -517,4 +521,38 @@ public class GenerationFichePaieServiceImpl implements GenerationFichePaieServic
         elementPaieRepository.delete(element);
         log.info("Élément de paie supprimé avec succès, ID: {}", elementPaieId);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<FichePaie> getFichePaieByEmployeId(Long userId) {
+        log.info("Récupération des fiches de paie pour l'utilisateur avec l'ID : {}", userId);
+
+        Users users = usersRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Utilisateur non trouvé avec l'ID : " + userId));
+        log.info("Utilisateur trouvé : {} de type {}", users.getPreNom(), users.getUserType());
+        List<FichePaie> fichesAccessibles = new ArrayList<>();
+
+        switch (users.getUserType()) {
+            case EMPLOYE:
+                log.info("Récupération des fiches de paie pour l'employé avec l'ID : {}", userId);
+                Employe employe = (Employe) employeRepository.findById(userId)
+                        .orElseThrow(() -> new EntityNotFoundException("Employé non trouvé pour l'utilisateur avec l'ID : " + userId));
+                fichesAccessibles = fichePaieRepository.findByEmploye(employe);
+                log.info("Employé - {} fiches de paie récupérées pour l'utilisateur {}", fichesAccessibles.size(), userId);
+                break;
+            case MANAGER:
+                List<Employe> equipe = employeRepository.findByManager(managerService.findById(userId));
+                for (Employe membre : equipe) {
+                    fichesAccessibles.addAll(fichePaieRepository.findByEmploye(membre));
+                }
+                log.info("Manager - {} fiches de paie récupérées (propres + équipe) pour l'utilisateur {}", fichesAccessibles.size(), userId);
+                break;
+            default:
+                log.warn("Type d'utilisateur non géré : {} pour l'utilisateur {}", users.getUserType(), userId);
+                break;
+        }
+        fichesAccessibles.sort((f1, f2) -> f2.getDateGeneration().compareTo(f1.getDateGeneration()));
+        return fichesAccessibles;
+    }
 }
+

@@ -45,7 +45,7 @@ public class DemandeCongeControllers {
      */
     @Transactional
     @PostMapping("/demande/{employeId}")
-    @PreAuthorize("permitAll()")
+    @PreAuthorize("hasAnyRole('EMPLOYE')")
     public ResponseEntity<String> envoyerDemandeConge(
             @PathVariable Long employeId,
             @RequestBody @Valid CreateDemandeCongeRequest demandeCongeRequest) {
@@ -98,11 +98,9 @@ public class DemandeCongeControllers {
     }
 
     @GetMapping("/list-sold-conge/{employeId}")
+    @PreAuthorize("hasAnyRole('EMPLOYE')")
     public ResponseEntity<?> getSoldCongeList(@PathVariable Long employeId) {
         try {
-            System.out.println("______________________________");
-            System.out.println("______________________________");
-            System.out.println("______________________________");
             return ResponseEntity.ok(soldeCongeService.recupererSoldeCongesRestant(employeId));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Erreur interne du serveur");
@@ -112,9 +110,6 @@ public class DemandeCongeControllers {
     @GetMapping("/list-demande-conge/{managerId}")
     public ResponseEntity<?> getDemandeByManager(@PathVariable Long managerId) {
         try {
-            System.out.println("____");
-            System.out.println("____________");
-            System.out.println("____________________________");
             return ResponseEntity.ok(demandeCongeService.getDemandeCongeByManager(managerId));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Erreur interne du serveur");
@@ -123,6 +118,7 @@ public class DemandeCongeControllers {
 
     @PutMapping("/validation-demande/{managerId}")
     @Transactional
+    @PreAuthorize(value = "hasAnyRole('MANAGER', 'RH')")
     public ResponseEntity<String> validationDemandeConge(
             @PathVariable Long managerId,
             @RequestBody @Valid ValidationDemande validationDemande
@@ -147,6 +143,7 @@ public class DemandeCongeControllers {
     }
 
     @PostMapping("/save-type-conge")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<?> saveTypeConges(
             @RequestBody @Valid TypeConge typeConge
     ) {
@@ -162,6 +159,7 @@ public class DemandeCongeControllers {
     }
 
     @DeleteMapping("/delete-type-conge/{id}")
+    @PreAuthorize("hasRole('RH')")
     public ResponseEntity<?> deleteTypeConge(@PathVariable Long id) {
         try {
             log.info("Suppression du type de congé avec l'ID: {}", id);

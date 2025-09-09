@@ -4,8 +4,12 @@ import ma.digitalia.gestionconges.Enum.StatutDemande;
 import ma.digitalia.gestionconges.dto.CongesPrisDTO;
 import ma.digitalia.gestionconges.entities.DemandeConge;
 import ma.digitalia.gestionconges.repositories.DemandeCongeRepository;
+import ma.digitalia.gestionutilisateur.Enum.UserType;
 import ma.digitalia.gestionutilisateur.entities.Employe;
+import ma.digitalia.gestionutilisateur.entities.Users;
 import ma.digitalia.gestionutilisateur.repositories.EmployeRepository;
+import ma.digitalia.gestionutilisateur.repositories.UsersRepository;
+import ma.digitalia.gestionutilisateur.services.ManagerService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -22,9 +26,21 @@ public class CongesPrisServiceImpl implements CongesPrisService {
     @Autowired
     private EmployeRepository employeRepository;
 
+    @Autowired
+    private UsersRepository usersRepository;
+    @Autowired
+    private ManagerService managerService;
+
     @Override
-    public List<CongesPrisDTO> getAllCongesPris() {
-        return getCongesPrisByAnnee(LocalDate.now().getYear());
+    public List<CongesPrisDTO> getAllCongesPris(Long userId) {
+        Users currentUser = usersRepository.findById(userId).orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+        if(currentUser.getUserType() == UserType.RH)
+            return getCongesPrisByAnnee(LocalDate.now().getYear());
+        if(currentUser.getUserType() == UserType.MANAGER) {
+            return getCongesPrisByValidateur(userId, LocalDate.now().getYear());
+        } else {
+            return getCongesPrisByEmploye(currentUser.getId());
+        }
     }
 
     @Override
@@ -37,6 +53,14 @@ public class CongesPrisServiceImpl implements CongesPrisService {
         return convertToDTO(congesValidees);
     }
 
+    public List<CongesPrisDTO> getCongesPrisByValidateur(Long ValidateurId, int annee) {
+        List<DemandeConge> congesValidees = demandeCongeRepository.findDemandeCongeByValidateur(managerService.findById(ValidateurId))
+                .stream()
+                .filter(demande -> demande.getDateDebut().getYear() == annee)
+                .collect(Collectors.toList());
+
+        return convertToDTO(congesValidees);
+    }
     @Override
     public List<CongesPrisDTO> getCongesPrisByEmploye(Long employeId) {
         Employe employe = (Employe) employeRepository.findById(employeId)

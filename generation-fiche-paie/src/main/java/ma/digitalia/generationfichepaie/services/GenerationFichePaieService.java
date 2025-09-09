@@ -55,4 +55,6 @@ public interface GenerationFichePaieService {
      * @param elementPaieId l'identifiant de l'élément de paie à supprimer
      */
     void supprimerElementPaie(Long elementPaieId);
+
+   List<FichePaie> getFichePaieByEmployeId(Long employeId);
 }

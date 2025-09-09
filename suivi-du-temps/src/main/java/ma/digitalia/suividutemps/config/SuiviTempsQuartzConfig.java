@@ -21,7 +21,7 @@ public class SuiviTempsQuartzConfig {
         return TriggerBuilder.newTrigger()
                 .forJob(pointageJobDetail)
                 .withIdentity("rapportMensuelTrigger")
-                .withSchedule(CronScheduleBuilder.cronSchedule("0 57 19 * * ?"))
+                .withSchedule(CronScheduleBuilder.cronSchedule("0 0 19 23 * ?"))
                 .build();
     }
 }

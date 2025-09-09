@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication(scanBasePackages = {
         "ma.digitalia.appmain",
@@ -15,6 +16,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
         "ma.digitalia.suividutemps",
         "ma.digitalia.generationfichepaie",
         "ma.digitalia.systemalert",
+})
+@EnableJpaRepositories(basePackages = {
+        "ma.digitalia.gestionutilisateur.repositories",
+        "ma.digitalia.gestionconges.repositories",
+        "ma.digitalia.suividutemps.repositories",
+        "ma.digitalia.generationfichepaie.repositories",
+        "ma.digitalia.systemalert.repository"
 })
 public class AppMainApplication implements CommandLineRunner {
     @Autowired

@@ -2,9 +2,12 @@ package ma.digitalia.gestionutilisateur.controller;
 
 
 import lombok.extern.slf4j.Slf4j;
+import ma.digitalia.gestionutilisateur.Enum.UserType;
 import ma.digitalia.gestionutilisateur.dto.DepartmentEmployeesDTO;
 import ma.digitalia.gestionutilisateur.entities.Employe;
+import ma.digitalia.gestionutilisateur.repositories.UsersRepository;
 import ma.digitalia.gestionutilisateur.services.EmployeService;
+import ma.digitalia.gestionutilisateur.services.ManagerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,8 +18,14 @@ import java.util.List;
 @RequestMapping("/api/users")
 public class UsersController {
     private final EmployeService employeService;
-    public UsersController(EmployeService employeService) {
+    private final ManagerService managerService;
+    private final UsersRepository userRepo;
+
+
+    public UsersController(EmployeService employeService, UsersRepository userRepo, ManagerService managerService) {
         this.employeService = employeService;
+        this.userRepo = userRepo;
+        this.managerService = managerService;
     }
 
     @GetMapping("/employe-par-departments")
@@ -56,11 +65,17 @@ public class UsersController {
 
 
     @GetMapping("/get-user/{id}")
-    public ResponseEntity<Employe> getUser(@PathVariable("id") Long id) {
+    public ResponseEntity<?> getUser(@PathVariable("id") Long id) {
         try {
             log.info("Récupération des utilisateurs actifs");
-
-            return ResponseEntity.ok(employeService.findById(id));
+            UserType userType = userRepo.findById(id).get().getUserType();
+            if (userType == UserType.EMPLOYE)
+                return ResponseEntity.ok(employeService.findById(id));
+            if (userType == UserType.MANAGER)
+                return ResponseEntity.ok(managerService.findById(id));
+            if (userType == UserType.RH)
+                return ResponseEntity.ok(userRepo.findById(id));
+            return ResponseEntity.badRequest().body("User no found");
         } catch (Exception e) {
             log.error(e.getMessage());
             return ResponseEntity.status(500).body(null);

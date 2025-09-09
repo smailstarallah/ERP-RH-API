@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import ma.digitalia.generationfichepaie.dto.AjoutElementPaieDTO;
 import ma.digitalia.generationfichepaie.dto.dashboard.DashboardResponseDto;
 import ma.digitalia.generationfichepaie.entities.ElementPaie;
+import ma.digitalia.generationfichepaie.entities.FichePaie;
 import ma.digitalia.generationfichepaie.services.DashboardService;
 import ma.digitalia.generationfichepaie.services.GenerationFichePaieService;
 import ma.digitalia.generationfichepaie.services.GenerationFichePaieServiceImpl;
@@ -184,6 +185,34 @@ public class GenerationFichePaieController {
         } catch (Exception e) {
             log.error("Erreur lors de la récupération des données du tableau de bord: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @GetMapping("/employe/{empId}")
+    public ResponseEntity<?> getFichePaieByEmployeId(@PathVariable Long empId) {
+        try {
+            log.info("Récupération des fiches de paie pour l'employé ID: {}", empId);
+            List<FichePaie> fiches = generationFichePaieService.getFichePaieByEmployeId(empId);
+            log.info("Récupération réussie de {} fiches de paie pour l'employé ID: {}",
+                    fiches.size(), empId);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Fiches de paie récupérées avec succès");
+            response.put("data", fiches);
+            response.put("count", fiches.size());
+
+            return ResponseEntity.ok(response);
+
+        } catch (EntityNotFoundException e) {
+            log.error("Employé non trouvé ID: {} - {}", empId, e.getMessage());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Employé non trouvé");
+
+        } catch (Exception e) {
+            log.error("Erreur lors de la récupération des fiches de paie pour l'employé ID: {}", empId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Une erreur s'est produite lors de la récupération des fiches de paie");
         }
     }
 }

@@ -40,11 +40,6 @@
             <artifactId>gestion-utilisateur</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
-        <dependency>
-            <groupId>ma.digitalia</groupId>
-            <artifactId>suivi-du-temps</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
-        </dependency>
 
         <dependency>
             <groupId>com.github.librepdf</groupId>
@@ -63,6 +58,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+          <dependency>
+            <groupId>ma.digitalia</groupId>
+            <artifactId>suivi-du-temps</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -70,6 +71,7 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <maven.compiler.proc>none</maven.compiler.proc>
             </plugin>
         </plugins>
     </build>

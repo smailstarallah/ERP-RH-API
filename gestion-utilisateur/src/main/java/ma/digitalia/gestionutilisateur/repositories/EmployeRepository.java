@@ -2,6 +2,7 @@ package ma.digitalia.gestionutilisateur.repositories;
 
 
 import ma.digitalia.gestionutilisateur.entities.Employe;
+import ma.digitalia.gestionutilisateur.entities.Manager;
 import ma.digitalia.gestionutilisateur.entities.Users;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,7 +19,9 @@ public interface EmployeRepository extends JpaRepository<Users, Long> {
 
     Optional<Employe> findByNumeroEmploye(String numeroEmploye);
 
-    List<Employe> findByManagerId(Long managerId);
+    List<Employe> findByManager(Manager manager);
+
+    List<Employe> findAllByActive(boolean active);
 
     @Query("SELECT e FROM Employe e WHERE e.manager.Id = ?1 AND e.active = true")
     List<Employe> findActiveEmployesByManager(Long managerId);

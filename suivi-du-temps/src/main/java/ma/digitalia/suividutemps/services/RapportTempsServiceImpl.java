@@ -32,7 +32,6 @@ public class RapportTempsServiceImpl implements RapportTempsService {
         this.pointageRepository = pointageRepository;
         this.employeRepository = employeRepository;
         this.planningTravailRepository = planningTravailRepository;
-        generateMonthlyReport(2L, Month.SEPTEMBER);
     }
 
     @Override

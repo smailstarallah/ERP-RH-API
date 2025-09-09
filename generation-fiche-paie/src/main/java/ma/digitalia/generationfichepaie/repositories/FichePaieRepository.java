@@ -12,7 +12,7 @@ import java.util.List;
 
 @Repository
 public interface FichePaieRepository extends JpaRepository<FichePaie, Long> {
-    FichePaie findByEmploye(Employe employe);
+    List<FichePaie> findByEmploye(Employe employe);
 
     FichePaie findByEmployeAndPeriode(Employe employe, java.time.YearMonth periode);
 

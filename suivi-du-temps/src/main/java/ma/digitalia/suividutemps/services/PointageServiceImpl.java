@@ -13,12 +13,16 @@ import ma.digitalia.suividutemps.Enum.TypeActivite;
 import ma.digitalia.suividutemps.dto.*;
 import ma.digitalia.suividutemps.entities.*;
 import ma.digitalia.suividutemps.repositories.*;
+import ma.digitalia.systemalert.model.dto.AlerteDTO;
+import ma.digitalia.systemalert.model.enums.TypeAlerte;
+import ma.digitalia.systemalert.service.AlerteService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -38,10 +42,11 @@ public class PointageServiceImpl implements PointageService {
     private final ActiviteRepository activiteRepo;
     private final ProjetRepository projetRepo;
     private final TacheRepository tacheRepo;
+    private final AlerteService alerteService;
 
 
     public PointageServiceImpl(PointageRepository pointageRepository, EmployeService employeService, ManagerService managerService, PlanningTravailRepository planningTravailRepository
-    , ActiviteRepository activiteRepo, ProjetRepository projetRepo, TacheRepository tacheRepo) {
+    , ActiviteRepository activiteRepo, ProjetRepository projetRepo, TacheRepository tacheRepo, AlerteService alerteService) {
         this.pointageRepository = pointageRepository;
         this.employeService = employeService;
         this.managerService = managerService;
@@ -49,12 +54,14 @@ public class PointageServiceImpl implements PointageService {
         this.activiteRepo = activiteRepo;
         this.projetRepo = projetRepo;
         this.tacheRepo = tacheRepo;
+        this.alerteService = alerteService;
     }
 
     @Override
     @Transactional
     public void startTimeTracking(PointageRequest pointageRequest) {
         if (pointageRepository.findByEmployeIdAndStatut(pointageRequest.getEmpId(), StatutPointage.EN_COURS).isPresent()) {
+            creerEtPublierAlerte(pointageRequest.getEmpId(), TypeAlerte.WARNING, "Impossible de démarrer la journée : une journée est déjà en cours.");
             throw new IllegalStateException("Une journée est déjà en cours pour cet employé.");
         }
         Employe employe = employeService.findById(pointageRequest.getEmpId());
@@ -72,17 +79,28 @@ public class PointageServiceImpl implements PointageService {
     @Override
     @Transactional
     public void stopTimeTracking(PointageRequest pointageRequest) {
+        Long employeId = pointageRequest.getEmpId();
+        try {
+            terminerActiviteCourante(employeId);
 
-        terminerActiviteCourante(pointageRequest.getEmpId());
+            Pointage pointage = pointageRepository.findByEmployeIdAndStatut(employeId, StatutPointage.EN_COURS)
+                    .orElseThrow(() -> new IllegalStateException("Aucune journée de travail à terminer pour cet employé."));
 
-        Pointage pointage = pointageRepository.findByEmployeIdAndStatut(pointageRequest.getEmpId(), StatutPointage.EN_COURS)
-                .orElseThrow(() -> new IllegalStateException("Aucune journée de travail à terminer pour cet employé."));
+            pointage.calculerHeuresTravaillees();
+            pointage.setHeureSortie(LocalDateTime.now());
+            pointage.setStatut(StatutPointage.TERMINE);
+            pointageRepository.save(pointage);
 
-        pointage.calculerHeuresTravaillees();
-        pointage.setHeureSortie(LocalDateTime.now());
-        pointage.setStatut(StatutPointage.TERMINE);
+            String formattedDate = pointage.getDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            creerEtPublierAlerte(employeId, TypeAlerte.INFO, "Pointage de sortie enregistré pour la journée du " + formattedDate);
 
-        pointageRepository.save(pointage);
+        } catch(IllegalStateException e) {
+            creerEtPublierAlerte(employeId, TypeAlerte.WARNING, "Impossible de terminer la journée car elle n'a pas été démarrée.");
+            throw e;
+        } catch(Exception e) {
+            log.error("Erreur dans stopTimeTracking pour employeId {}", employeId, e);
+            throw e;
+        }
     }
 
     private void terminerActiviteCourante(Long employeId) {
@@ -129,7 +147,7 @@ public class PointageServiceImpl implements PointageService {
             nouvelleActivite.setTache(tache);
             nouvelleActivite.setProjet(tache.getProjet());
         }
-
+        creerEtPublierAlerte(employeId, TypeAlerte.INFO, "Activité '" + type.name() + "' démarrée.");
         return activiteRepo.save(nouvelleActivite);
     }
 
@@ -665,5 +683,18 @@ public class PointageServiceImpl implements PointageService {
     @Override
     public void startReunionTime(PointageRequest pointageRequest) {
         demarrerOuChangerActivite(pointageRequest.getEmpId(), TypeActivite.REUNION, null, null, pointageRequest.getCommentaire());
+    }
+
+    private void creerEtPublierAlerte(Long userId, TypeAlerte type, String message) {
+        try {
+            AlerteDTO alerteDTO = new AlerteDTO();
+            alerteDTO.setUserId(userId);
+            alerteDTO.setMessage(message);
+            alerteDTO.setType(type);
+            alerteDTO.setTitre("Notification de congé");
+            alerteService.creerAlerte(alerteDTO);
+        } catch (Exception e) {
+            log.error("Impossible de créer et d'envoyer l'alerte pour l'utilisateur {} : {}", userId, e.getMessage());
+        }
     }
 }

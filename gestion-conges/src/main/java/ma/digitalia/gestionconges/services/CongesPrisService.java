@@ -11,7 +11,7 @@ public interface CongesPrisService {
     /**
      * Récupérer tous les congés pris (validés) pour l'année courante
      */
-    List<CongesPrisDTO> getAllCongesPris();
+    List<CongesPrisDTO> getAllCongesPris(Long userId);
 
     /**
      * Récupérer les congés pris pour une année spécifique

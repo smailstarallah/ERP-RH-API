@@ -42,6 +42,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/ws/alertes/**").permitAll()
+                        .requestMatchers("/ws/alertes/info").permitAll()
+
                         .requestMatchers("/h2-console/**").permitAll()
                         .requestMatchers("/api/gestion-conge/**").permitAll()
                         .requestMatchers("/api/users/employes/**").hasAnyRole("MANAGER", "RH")
@@ -85,7 +88,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
 
         // Méthodes HTTP autorisées
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
 
         // En-têtes autorisés
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type"));

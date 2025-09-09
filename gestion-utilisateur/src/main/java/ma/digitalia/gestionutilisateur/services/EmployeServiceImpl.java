@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import ma.digitalia.gestionutilisateur.dto.DepartmentEmployeesDTO;
 import ma.digitalia.gestionutilisateur.entities.Employe;
 import ma.digitalia.gestionutilisateur.repositories.EmployeRepository;
+import ma.digitalia.gestionutilisateur.repositories.UsersRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +37,11 @@ public class EmployeServiceImpl implements EmployeService {
         } else {
             throw new EntityNotFoundException("Employe not found with id: " + id);
         }
+    }
+
+    @Override
+    public List<Employe> findAll() {
+        return empRepo.findAllByActive(true);
     }
 
     @Override

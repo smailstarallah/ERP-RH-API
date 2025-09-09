@@ -22,6 +22,12 @@ public interface EmployeService {
     Employe findById(Long id);
 
     /**
+     * Find all employees.
+     * @return a list of all employees
+     */
+    List<Employe> findAll();
+
+    /**
      * Update an employee.
      * @param id
      * @param employe
@@ -63,4 +69,6 @@ public interface EmployeService {
     void updateEmploye(Employe employe);
 
     void activateEmploye(Long id);
+
+
 }

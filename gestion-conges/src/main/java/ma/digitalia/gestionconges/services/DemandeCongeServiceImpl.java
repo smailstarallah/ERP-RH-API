@@ -16,7 +16,12 @@ import ma.digitalia.gestionutilisateur.services.EmployeService;
 import ma.digitalia.gestionutilisateur.services.ManagerService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ma.digitalia.systemalert.model.dto.AlerteDTO;
+import ma.digitalia.systemalert.model.enums.TypeAlerte;
+import ma.digitalia.systemalert.service.AlerteService;
+import org.springframework.stereotype.Service;
 
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,12 +33,15 @@ public class DemandeCongeServiceImpl implements DemandeCongeService {
     EmployeService employeService;
     ManagerService managerService;
     TypeCongeService typeCongeService;
+    private final AlerteService alerteService;
 
-    public DemandeCongeServiceImpl(DemandeCongeRepository demandeCongeRepository, EmployeService employeService, ManagerService managerService, TypeCongeService typeCongeService) {
+    public DemandeCongeServiceImpl(DemandeCongeRepository demandeCongeRepository, EmployeService employeService, ManagerService managerService
+            , TypeCongeService typeCongeService, AlerteService alerteService) {
         this.demandeCongeRepository = demandeCongeRepository;
         this.employeService = employeService;
         this.typeCongeService = typeCongeService;
         this.managerService = managerService;
+        this.alerteService = alerteService;
     }
 
     @Override
@@ -60,6 +68,9 @@ public class DemandeCongeServiceImpl implements DemandeCongeService {
 
             demandeCongeRepository.save(demandeConge);
             log.info("Demande de congé envoyée avec succès : {}", demandeConge);
+            String message = String.format("Nouvelle demande de congé de %s %s.",
+                    employe.getPreNom(), employe.getNom());
+            creerEtEnvoyerAlerte(employe.getManager().getId(), message, TypeAlerte.INFO);
             return true;
         } catch (EntityNotFoundException e) {
             throw e;
@@ -83,39 +94,63 @@ public class DemandeCongeServiceImpl implements DemandeCongeService {
     }
 
     @Override
+    @Transactional
     public boolean validerDemandeConge(Long demandeCongeId, Long managerId, String commentaire) {
         try {
-            if(demandeCongeRepository.existsById(demandeCongeId) && managerService.existsById(managerId)
-                    && managerId == demandeCongeRepository.findById(demandeCongeId).get().getValidateur().getId()
-            ) {
-                demandeCongeRepository.updateStatutConge(demandeCongeId, StatutDemande.VALIDEE);
-                if (commentaire != null && !commentaire.isEmpty()) {
-                    demandeCongeRepository.updateCommentaireDemandeConge(demandeCongeId, commentaire);
-                }
-                return true;
+            DemandeConge demande = demandeCongeRepository.findById(demandeCongeId)
+                    .orElseThrow(() -> new EntityNotFoundException("Demande non trouvée: " + demandeCongeId));
+
+            if (!demande.getValidateur().getId().equals(managerId)) {
+                log.warn("Tentative de validation non autorisée par le manager {} pour la demande {}", managerId, demandeCongeId);
+                // Optionnel : Alerte de sécurité pour l'admin
+//                creerEtEnvoyerAlerte(ADMIN_USER_ID, "Tentative de validation non autorisée par le manager " + managerId, TypeAlerte.WARNING);
+                return false;
             }
+
+            demande.setStatut(StatutDemande.VALIDEE);
+            if (commentaire != null && !commentaire.isEmpty()) {
+                demande.setCommentaire(commentaire);
+            }
+            demandeCongeRepository.save(demande);
+
+            String message = String.format("Votre demande de congé du %s a été VALIDÉE.",
+                    demande.getDateDebut().format(DateTimeFormatter.ISO_LOCAL_DATE));
+            creerEtEnvoyerAlerte(demande.getDemandeur().getId(), message, TypeAlerte.INFO);
+
+            return true;
         } catch (Exception e) {
+            log.error("Erreur lors de la validation de la demande {}", demandeCongeId, e);
+//            creerEtEnvoyerAlerte(ADMIN_USER_ID, "Erreur inattendue dans validerDemandeConge: " + e.getMessage(), TypeAlerte.ERROR);
             throw new RuntimeException(e);
         }
-        return false;
     }
 
     @Override
     public boolean refuserDemandeConge(Long demandeCongeId, Long managerId, String commentaire) {
         try {
-            if(demandeCongeRepository.existsById(demandeCongeId) && managerService.existsById(managerId)
-                    && managerId == demandeCongeRepository.findById(demandeCongeId).get().getValidateur().getId()
-            ) {
-                demandeCongeRepository.updateStatutConge(demandeCongeId, StatutDemande.REJETEE);
-                if (commentaire != null && !commentaire.isEmpty()) {
-                    demandeCongeRepository.updateCommentaireDemandeConge(demandeCongeId, commentaire);
-                }
-                return true;
+            DemandeConge demande = demandeCongeRepository.findById(demandeCongeId)
+                    .orElseThrow(() -> new EntityNotFoundException("Demande non trouvée: " + demandeCongeId));
+
+            if (!demande.getValidateur().getId().equals(managerId)) {
+                log.warn("Tentative de refus non autorisée par le manager {} pour la demande {}", managerId, demandeCongeId);
+                return false;
             }
+
+            demande.setStatut(StatutDemande.REJETEE);
+            if (commentaire != null && !commentaire.isEmpty()) {
+                demande.setCommentaire(commentaire);
+            }
+            demandeCongeRepository.save(demande);
+
+            // --- NOTIFICATION À L'EMPLOYÉ ---
+            String message = String.format("Votre demande de congé du %s a été REJETÉE.",
+                    demande.getDateDebut().format(DateTimeFormatter.ISO_LOCAL_DATE));
+            creerEtEnvoyerAlerte(demande.getDemandeur().getId(), message, TypeAlerte.WARNING); // WARNING car action négative
+
+            return true;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return false;
     }
 
     @Override
@@ -142,4 +177,16 @@ public class DemandeCongeServiceImpl implements DemandeCongeService {
             throw new EntityNotFoundException("Manager non trouvé avec l'ID : " + managerId);
         }
     }
+    private void creerEtEnvoyerAlerte(Long userId, String message, TypeAlerte type) {
+    try {
+        AlerteDTO alerteDTO = new AlerteDTO();
+        alerteDTO.setUserId(userId);
+        alerteDTO.setMessage(message);
+        alerteDTO.setType(type);
+        alerteDTO.setTitre("Notification de congé");
+        alerteService.creerAlerte(alerteDTO);
+    } catch (Exception e) {
+        log.error("Impossible de créer et d'envoyer l'alerte pour l'utilisateur {} : {}", userId, e.getMessage());
+    }
+}
 }
