@@ -25,8 +25,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
         "ma.digitalia.systemalert.repository"
 })
 public class AppMainApplication implements CommandLineRunner {
-    @Autowired
-    PointageRepository pointageRepository;
 
     @Autowired
     private DataSynthetiqueService dataSynthetiqueService;

@@ -86,7 +86,7 @@ public class DemandeConge {
         this.nombreJours = calculeJoursOuvrables(dateDebut, dateFin);
     }
 
-    private int calculeJoursOuvrables(LocalDate startDate, LocalDate endDate) {
+    public int calculeJoursOuvrables(LocalDate startDate, LocalDate endDate) {
         int nombreJours = 0;
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {
